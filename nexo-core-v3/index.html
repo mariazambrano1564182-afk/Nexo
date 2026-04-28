@@ -163,7 +163,7 @@
 </head>
 <body class="min-h-screen">
 
-<div class="flex min-h-screen">
+<div id="app-shell" class="flex min-h-screen hidden">
   <!-- SIDEBAR -->
   <aside class="hidden md:flex flex-col w-64 shrink-0 border-r border-line/60 bg-base/70 backdrop-blur-xl">
     <div class="px-5 pt-5 pb-4">
@@ -206,11 +206,11 @@
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 15 4-4 4 4 5-6"/></svg>
         Reportes
       </button>
-      <button data-nav="usuarios" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-muted">
+      <button data-nav="usuarios" data-role="admin" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-muted">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
         Usuarios
       </button>
-      <button data-nav="configuracion" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-muted">
+      <button data-nav="configuracion" data-role="admin" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-muted">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.36.18.66.46.86.8.2.34.31.74.31 1.15 0 .41-.11.81-.31 1.15-.2.34-.5.62-.86.8Z"/></svg>
         Configuración
       </button>
@@ -243,8 +243,8 @@
           <h1 id="tenant-title" class="text-lg md:text-xl font-bold truncate">Ferretería El Centro</h1>
         </div>
 
-        <!-- TENANT SWITCHER -->
-        <div class="glass px-2 py-1.5 flex items-center gap-2">
+        <!-- TENANT SWITCHER (admin-only) -->
+        <div id="tenant-switcher-wrap" data-role="admin" class="glass px-2 py-1.5 flex items-center gap-2">
           <span class="hidden sm:block text-[10px] uppercase tracking-widest text-muted px-2">Tenant</span>
           <select id="tenant-switcher" class="select !py-1 !px-2 !w-auto text-sm">
             <option value="ferreteria">Ferretería El Centro</option>
@@ -252,11 +252,17 @@
           </select>
         </div>
 
-        <button class="btn btn-ghost hidden md:inline-flex items-center gap-2 text-sm">
-          <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 21l-4.3-4.3"/><circle cx="11" cy="11" r="8"/></svg>
-          Buscar
-        </button>
-        <div class="w-9 h-9 rounded-full bg-gradient-to-br from-neon/30 to-indigo-500/30 border border-line/40 flex items-center justify-center text-sm font-bold">SA</div>
+        <!-- USER MENU -->
+        <div class="glass px-3 py-1.5 flex items-center gap-3">
+          <div class="w-8 h-8 rounded-full bg-gradient-to-br from-neon/30 to-indigo-500/30 border border-line/40 flex items-center justify-center text-xs font-bold" id="user-avatar">SA</div>
+          <div class="hidden sm:block leading-tight">
+            <div class="text-xs font-semibold" id="user-name">—</div>
+            <div class="text-[10px] uppercase tracking-widest text-muted" id="user-role">—</div>
+          </div>
+          <button class="btn btn-ghost text-xs !px-2 !py-1" onclick="logout()" title="Cerrar sesión">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          </button>
+        </div>
       </div>
 
       <!-- Mobile nav -->
@@ -267,8 +273,8 @@
           <button data-nav="inventario" class="nav-item px-3 py-1.5 rounded-lg text-muted">Inventario</button>
           <button data-nav="gastos" class="nav-item px-3 py-1.5 rounded-lg text-muted">Gastos</button>
           <button data-nav="reportes" class="nav-item px-3 py-1.5 rounded-lg text-muted">Reportes</button>
-          <button data-nav="usuarios" class="nav-item px-3 py-1.5 rounded-lg text-muted">Usuarios</button>
-          <button data-nav="configuracion" class="nav-item px-3 py-1.5 rounded-lg text-muted">Configuración</button>
+          <button data-nav="usuarios" data-role="admin" class="nav-item px-3 py-1.5 rounded-lg text-muted">Usuarios</button>
+          <button data-nav="configuracion" data-role="admin" class="nav-item px-3 py-1.5 rounded-lg text-muted">Configuración</button>
         </div>
       </div>
     </header>
@@ -283,6 +289,54 @@
 
 <!-- MODAL ROOT -->
 <div id="modal-root"></div>
+
+<!-- LOGIN OVERLAY -->
+<div id="login-overlay" class="fixed inset-0 z-[100] hidden items-center justify-center p-4"
+     style="background:
+        radial-gradient(800px 500px at 15% 20%, rgba(0,242,255,0.12), transparent 60%),
+        radial-gradient(900px 600px at 85% 80%, rgba(99,102,241,0.12), transparent 60%),
+        #020617;">
+  <div class="glass-strong neon-border w-full max-w-md p-8 fade-in">
+    <div class="flex items-center gap-3 mb-6">
+      <div class="w-11 h-11 rounded-xl neon-border flex items-center justify-center">
+        <svg viewBox="0 0 24 24" class="w-6 h-6" fill="none" stroke="#00f2ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7l9 5 9-5-9-5Z"/><path d="m3 17 9 5 9-5"/><path d="m3 12 9 5 9-5"/></svg>
+      </div>
+      <div>
+        <div class="text-base font-bold tracking-wide">NEXO CORE</div>
+        <div class="text-[10px] text-muted tracking-[0.25em]">V3 · ACCESO SEGURO</div>
+      </div>
+    </div>
+
+    <h2 class="text-xl font-semibold mb-1">Iniciar sesión</h2>
+    <p class="text-sm text-muted mb-6">Ingresá tus credenciales para acceder al ERP.</p>
+
+    <form id="form-login" class="space-y-3">
+      <div>
+        <label class="text-xs uppercase tracking-widest text-muted">Usuario</label>
+        <input class="input mt-1" name="user" autocomplete="username" autofocus required />
+      </div>
+      <div>
+        <label class="text-xs uppercase tracking-widest text-muted">Clave</label>
+        <input class="input mt-1" name="pass" type="password" autocomplete="current-password" required />
+      </div>
+      <div id="login-error" class="hidden text-xs text-danger px-3 py-2 rounded-lg" style="background:rgba(244,63,94,0.08); border:1px solid rgba(244,63,94,0.3);"></div>
+      <button class="btn btn-primary w-full mt-2">Ingresar</button>
+    </form>
+
+    <div class="divider my-5"></div>
+    <div class="text-[11px] uppercase tracking-widest text-muted mb-2">Cuentas de prueba</div>
+    <div class="grid grid-cols-1 gap-2 text-xs">
+      <button type="button" class="glass p-2.5 text-left hover:neon-border transition" onclick="prefillLogin('admin','nexo2026')">
+        <div class="font-semibold">Super Admin</div>
+        <div class="text-muted">admin / nexo2026 · acceso total a todos los comercios</div>
+      </button>
+      <button type="button" class="glass p-2.5 text-left hover:neon-border transition" onclick="prefillLogin('ferreteria','cliente123')">
+        <div class="font-semibold">Cliente — Ferretería El Centro</div>
+        <div class="text-muted">ferreteria / cliente123 · solo su comercio</div>
+      </button>
+    </div>
+  </div>
+</div>
 
 <script>
 /* =========================================================
@@ -435,6 +489,11 @@ function tenant() { return STATE.tenants[STATE.currentTenant]; }
    Render principal
    ========================================================= */
 function render() {
+  // Si hay sesión activa, aplicar permisos y forzar tenant antes de renderizar
+  if (typeof applySessionToUI === 'function' && STATE.session) {
+    applySessionToUI();
+  }
+
   $('#bcv-side').textContent = STATE.bcv.toFixed(2);
   $('#tenant-title').textContent = tenant().name;
 
@@ -1414,7 +1473,15 @@ function barChart(data) {
 /* =========================================================
    Eventos globales
    ========================================================= */
-function setView(v) { STATE.view = v; render(); }
+function setView(v) {
+  // Bloqueo: no-admins no pueden navegar a vistas restringidas
+  if (!isAdmin() && (v === 'configuracion' || v === 'usuarios')) {
+    toast('No tenés permisos para acceder a esa sección');
+    return;
+  }
+  STATE.view = v;
+  render();
+}
 
 document.addEventListener('click', e => {
   const btn = e.target.closest('[data-nav]');
@@ -1423,6 +1490,7 @@ document.addEventListener('click', e => {
 
 document.addEventListener('change', e => {
   if (e.target && e.target.id === 'tenant-switcher') {
+    if (!isAdmin()) { e.target.value = STATE.currentTenant; return; }
     STATE.currentTenant = e.target.value;
     STATE.cart = [];
     saveToStorage();
@@ -1431,8 +1499,140 @@ document.addEventListener('change', e => {
   }
 });
 
+/* =========================================================
+   Autenticación (sessionStorage)
+   ========================================================= */
+const SESSION_KEY = 'nexo_core_v3_session';
+
+const USERS = {
+  'admin':      { pass: 'nexo2026',   role: 'admin',  name: 'Super Admin',          tenantKey: null },
+  'ferreteria': { pass: 'cliente123', role: 'client', name: 'Ferretería El Centro', tenantKey: 'ferreteria' }
+};
+
+function isAdmin() { return STATE.session && STATE.session.role === 'admin'; }
+
+function applySessionToUI() {
+  const s = STATE.session;
+  if (!s) return;
+
+  // Bloquear/forzar tenant para clientes
+  if (s.role === 'client' && s.tenantKey) {
+    STATE.currentTenant = s.tenantKey;
+  }
+
+  // Mostrar / ocultar elementos según rol
+  const hideForClient = s.role !== 'admin';
+  document.querySelectorAll('[data-role="admin"]').forEach(el => {
+    el.classList.toggle('hidden', hideForClient);
+  });
+
+  // Si el cliente está parado en una vista restringida, mandarlo al dashboard
+  if (hideForClient && (STATE.view === 'configuracion' || STATE.view === 'usuarios')) {
+    STATE.view = 'dashboard';
+  }
+
+  // Avatar + datos
+  const avatar = document.getElementById('user-avatar');
+  const uname = document.getElementById('user-name');
+  const urole = document.getElementById('user-role');
+  if (avatar) avatar.textContent = (s.name || s.user).slice(0,2).toUpperCase();
+  if (uname) uname.textContent = s.name || s.user;
+  if (urole) urole.textContent = s.role === 'admin' ? 'Super Admin' : 'Cliente';
+}
+
+function showLogin() {
+  const ov = document.getElementById('login-overlay');
+  const app = document.getElementById('app-shell');
+  ov.classList.remove('hidden');
+  ov.classList.add('flex');
+  app.classList.add('hidden');
+  const errEl = document.getElementById('login-error');
+  if (errEl) errEl.classList.add('hidden');
+  const form = document.getElementById('form-login');
+  if (form) form.reset();
+  setTimeout(() => { const u = form && form.querySelector('[name="user"]'); if (u) u.focus(); }, 50);
+}
+
+function hideLogin() {
+  const ov = document.getElementById('login-overlay');
+  const app = document.getElementById('app-shell');
+  ov.classList.add('hidden');
+  ov.classList.remove('flex');
+  app.classList.remove('hidden');
+}
+
+function loginAttempt(user, pass) {
+  const u = USERS[user.trim().toLowerCase()];
+  if (!u || u.pass !== pass) return false;
+  STATE.session = {
+    user: user.trim().toLowerCase(),
+    role: u.role,
+    name: u.name,
+    tenantKey: u.tenantKey,
+    loggedAt: Date.now()
+  };
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(STATE.session));
+  return true;
+}
+
+function restoreSession() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return false;
+    STATE.session = JSON.parse(raw);
+    return !!STATE.session;
+  } catch { return false; }
+}
+
+function logout() {
+  STATE.session = null;
+  sessionStorage.removeItem(SESSION_KEY);
+  STATE.view = 'dashboard';
+  STATE.cart = [];
+  showLogin();
+  toast('Sesión cerrada');
+}
+
+function prefillLogin(user, pass) {
+  const f = document.getElementById('form-login');
+  if (!f) return;
+  f.querySelector('[name="user"]').value = user;
+  f.querySelector('[name="pass"]').value = pass;
+  f.querySelector('[name="pass"]').focus();
+}
+
+document.getElementById('form-login').addEventListener('submit', e => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const user = (fd.get('user') || '').toString();
+  const pass = (fd.get('pass') || '').toString();
+  const errEl = document.getElementById('login-error');
+  if (loginAttempt(user, pass)) {
+    errEl.classList.add('hidden');
+    hideLogin();
+    applySessionToUI();
+    render();
+    toast(`Bienvenido, ${STATE.session.name}`);
+  } else {
+    errEl.textContent = 'Usuario o clave incorrectos. Verificá tus credenciales.';
+    errEl.classList.remove('hidden');
+    const passEl = e.target.querySelector('[name="pass"]');
+    if (passEl) { passEl.value = ''; passEl.focus(); }
+  }
+});
+
+/* =========================================================
+   Boot
+   ========================================================= */
 loadFromStorage();
-render();
+
+if (restoreSession()) {
+  hideLogin();
+  applySessionToUI();
+  render();
+} else {
+  showLogin();
+}
 </script>
 </body>
 </html>
