@@ -1,0 +1,1638 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Nexo Core V3 — ERP Multi-Tenant</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          base:    '#020617',
+          surface: '#0b1224',
+          neon:    '#00f2ff',
+          ink:     '#f8fafc',
+          muted:   '#94a3b8',
+          line:    'rgba(148,163,184,0.15)',
+        },
+        boxShadow: {
+          glow: '0 0 24px rgba(0,242,255,0.35)',
+          glowSoft: '0 0 12px rgba(0,242,255,0.18)',
+        },
+        fontFamily: {
+          sans: ['Inter', 'system-ui', 'sans-serif'],
+        }
+      }
+    }
+  }
+</script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  html, body { background: #020617; color: #f8fafc; font-family: 'Inter', sans-serif; }
+  body {
+    background-image:
+      radial-gradient(800px 500px at 10% -10%, rgba(0,242,255,0.10), transparent 60%),
+      radial-gradient(900px 600px at 110% 10%, rgba(99,102,241,0.10), transparent 60%),
+      radial-gradient(700px 500px at 50% 110%, rgba(0,242,255,0.06), transparent 60%);
+    background-attachment: fixed;
+  }
+  .glass {
+    background: linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.015));
+    border: 1px solid rgba(148,163,184,0.15);
+    backdrop-filter: blur(14px);
+    -webkit-backdrop-filter: blur(14px);
+    border-radius: 16px;
+  }
+  .glass-strong {
+    background: linear-gradient(180deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+    border: 1px solid rgba(148,163,184,0.18);
+    backdrop-filter: blur(18px);
+    -webkit-backdrop-filter: blur(18px);
+    border-radius: 16px;
+  }
+  .neon-border { box-shadow: inset 0 0 0 1px rgba(0,242,255,0.35), 0 0 18px rgba(0,242,255,0.15); }
+  .neon-text { color: #00f2ff; text-shadow: 0 0 12px rgba(0,242,255,0.35); }
+  .nav-item.active {
+    background: linear-gradient(90deg, rgba(0,242,255,0.12), rgba(0,242,255,0.0));
+    color: #f8fafc;
+    box-shadow: inset 2px 0 0 0 #00f2ff;
+  }
+  .nav-item:hover { background: rgba(255,255,255,0.04); }
+  .badge-neon {
+    background: rgba(0,242,255,0.10);
+    color: #00f2ff;
+    border: 1px solid rgba(0,242,255,0.35);
+  }
+  .input, .select {
+    background: rgba(2,6,23,0.6);
+    border: 1px solid rgba(148,163,184,0.18);
+    color: #f8fafc;
+    border-radius: 10px;
+    padding: 0.55rem 0.75rem;
+    width: 100%;
+    transition: border-color .15s, box-shadow .15s;
+  }
+  .input:focus, .select:focus {
+    outline: none;
+    border-color: #00f2ff;
+    box-shadow: 0 0 0 3px rgba(0,242,255,0.15);
+  }
+  .btn {
+    border-radius: 10px;
+    padding: 0.55rem 0.95rem;
+    font-weight: 600;
+    transition: transform .08s, box-shadow .15s, background .15s;
+  }
+  .btn-primary { background: #00f2ff; color: #020617; box-shadow: 0 0 14px rgba(0,242,255,0.45); }
+  .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 22px rgba(0,242,255,0.65); }
+  .btn-ghost { background: rgba(255,255,255,0.04); color: #f8fafc; border: 1px solid rgba(148,163,184,0.18); }
+  .btn-ghost:hover { background: rgba(255,255,255,0.08); }
+  .btn-danger {
+    background: rgba(244,63,94,0.10);
+    color: #fb7185;
+    border: 1px solid rgba(244,63,94,0.35);
+    box-shadow: 0 0 0 0 rgba(244,63,94,0);
+    transition: background .15s, box-shadow .15s, color .15s, transform .08s;
+  }
+  .btn-danger:hover {
+    background: rgba(244,63,94,0.18);
+    color: #fecaca;
+    box-shadow: 0 0 14px rgba(244,63,94,0.45);
+    transform: translateY(-1px);
+  }
+  .text-danger { color: #fb7185; text-shadow: 0 0 10px rgba(244,63,94,0.35); }
+  /* Modal */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(2,6,23,0.72);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 1rem;
+    animation: fade .2s ease-out;
+  }
+  .modal-card {
+    width: 100%; max-width: 460px;
+    max-height: 90vh; overflow: auto;
+  }
+  /* Print scope */
+  @media print {
+    body * { visibility: hidden !important; }
+    #print-area, #print-area * { visibility: visible !important; }
+    #print-area {
+      position: absolute; inset: 0;
+      background: #ffffff !important;
+      color: #020617 !important;
+      padding: 28px !important;
+      box-shadow: none !important;
+      border: none !important;
+      backdrop-filter: none !important;
+      max-height: none !important;
+      overflow: visible !important;
+    }
+    #print-area .neon-text, #print-area .text-neon { color: #020617 !important; text-shadow: none !important; }
+    #print-area .text-muted { color: #475569 !important; }
+    #print-area .badge-neon { color: #020617 !important; background: #f1f5f9 !important; border-color: #cbd5e1 !important; }
+    #print-area .divider { background: #cbd5e1 !important; }
+    #print-area .no-print { display: none !important; }
+  }
+  table { width: 100%; border-collapse: collapse; }
+  th { text-align: left; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #94a3b8; font-weight: 600; padding: 12px 14px; border-bottom: 1px solid rgba(148,163,184,0.15); }
+  td { padding: 14px; border-bottom: 1px solid rgba(148,163,184,0.08); font-size: 14px; }
+  tr:hover td { background: rgba(255,255,255,0.02); }
+  .scroll-thin::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scroll-thin::-webkit-scrollbar-thumb { background: rgba(148,163,184,0.2); border-radius: 8px; }
+  .scroll-thin::-webkit-scrollbar-thumb:hover { background: rgba(0,242,255,0.35); }
+  .scroll-thin::-webkit-scrollbar-track { background: transparent; }
+  .table-scroll { max-height: 460px; overflow: auto; }
+  .table-scroll thead th {
+    position: sticky; top: 0; z-index: 1;
+    background: rgba(11,18,36,0.92);
+    backdrop-filter: blur(10px);
+  }
+  .pulse-dot { width: 8px; height: 8px; border-radius: 999px; background: #00f2ff; box-shadow: 0 0 10px #00f2ff; animation: pulse 1.6s ease-in-out infinite; }
+  @keyframes pulse { 0%,100% { opacity: 1; transform: scale(1);} 50% { opacity: .55; transform: scale(.85);} }
+  .fade-in { animation: fade .25s ease-out; }
+  @keyframes fade { from { opacity: 0; transform: translateY(4px);} to { opacity: 1; transform: translateY(0);} }
+  .divider { height: 1px; background: linear-gradient(90deg, transparent, rgba(148,163,184,0.25), transparent); }
+</style>
+</head>
+<body class="min-h-screen">
+
+<div id="app-shell" class="flex min-h-screen hidden">
+  <!-- SIDEBAR -->
+  <aside class="hidden md:flex flex-col w-64 shrink-0 border-r border-line/60 bg-base/70 backdrop-blur-xl">
+    <div class="px-5 pt-5 pb-4">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-xl neon-border flex items-center justify-center">
+          <svg viewBox="0 0 24 24" class="w-5 h-5" fill="none" stroke="#00f2ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7l9 5 9-5-9-5Z"/><path d="m3 17 9 5 9-5"/><path d="m3 12 9 5 9-5"/></svg>
+        </div>
+        <div>
+          <div class="text-sm font-bold tracking-wide">NEXO CORE</div>
+          <div class="text-[10px] text-muted tracking-[0.2em]">V3 · MULTI-TENANT</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="px-3 mt-2 mb-4">
+      <div class="glass px-3 py-2 flex items-center gap-2">
+        <span class="pulse-dot"></span>
+        <span class="text-[11px] uppercase tracking-widest text-muted">Super Admin</span>
+      </div>
+    </div>
+
+    <nav class="px-2 space-y-1 text-sm">
+      <button data-nav="dashboard" class="nav-item active w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-muted">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
+        Dashboard
+      </button>
+      <button data-nav="pos" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-muted">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="6" width="20" height="12" rx="2"/><path d="M2 10h20"/><path d="M6 14h2"/></svg>
+        POS
+      </button>
+      <button data-nav="inventario" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-muted">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 8 12 3 3 8l9 5 9-5Z"/><path d="M3 8v8l9 5 9-5V8"/></svg>
+        Inventario
+      </button>
+      <button data-nav="gastos" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-muted">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+        Gastos
+      </button>
+      <button data-nav="reportes" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-muted">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 3v18h18"/><path d="m7 15 4-4 4 4 5-6"/></svg>
+        Reportes
+      </button>
+      <button data-nav="usuarios" data-role="admin" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-muted">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>
+        Usuarios
+      </button>
+      <button data-nav="configuracion" data-role="admin" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-muted">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.36.18.66.46.86.8.2.34.31.74.31 1.15 0 .41-.11.81-.31 1.15-.2.34-.5.62-.86.8Z"/></svg>
+        Configuración
+      </button>
+    </nav>
+
+    <div class="mt-auto p-3">
+      <div class="glass p-3">
+        <div class="text-[11px] uppercase tracking-widest text-muted mb-1">Tasa BCV vigente</div>
+        <div class="flex items-end justify-between">
+          <div class="text-2xl font-bold neon-text"><span id="bcv-side">36.50</span></div>
+          <div class="text-[11px] text-muted">Bs / USD</div>
+        </div>
+      </div>
+    </div>
+  </aside>
+
+  <!-- MAIN -->
+  <main class="flex-1 min-w-0">
+    <!-- TOPBAR -->
+    <header class="sticky top-0 z-20 border-b border-line/60 bg-base/70 backdrop-blur-xl">
+      <div class="flex items-center gap-3 px-4 md:px-8 py-3">
+        <div class="md:hidden">
+          <div class="w-9 h-9 rounded-xl neon-border flex items-center justify-center">
+            <span class="text-neon font-bold">N</span>
+          </div>
+        </div>
+
+        <div class="flex-1 min-w-0">
+          <div class="text-[11px] uppercase tracking-[0.25em] text-muted">Comercio activo</div>
+          <h1 id="tenant-title" class="text-lg md:text-xl font-bold truncate">Ferretería El Centro</h1>
+        </div>
+
+        <!-- TENANT SWITCHER (admin-only) -->
+        <div id="tenant-switcher-wrap" data-role="admin" class="glass px-2 py-1.5 flex items-center gap-2">
+          <span class="hidden sm:block text-[10px] uppercase tracking-widest text-muted px-2">Tenant</span>
+          <select id="tenant-switcher" class="select !py-1 !px-2 !w-auto text-sm">
+            <option value="ferreteria">Ferretería El Centro</option>
+            <option value="farmacia">Farmacia Global</option>
+          </select>
+        </div>
+
+        <!-- USER MENU -->
+        <div class="glass px-3 py-1.5 flex items-center gap-3">
+          <div class="w-8 h-8 rounded-full bg-gradient-to-br from-neon/30 to-indigo-500/30 border border-line/40 flex items-center justify-center text-xs font-bold" id="user-avatar">SA</div>
+          <div class="hidden sm:block leading-tight">
+            <div class="text-xs font-semibold" id="user-name">—</div>
+            <div class="text-[10px] uppercase tracking-widest text-muted" id="user-role">—</div>
+          </div>
+          <button class="btn btn-ghost text-xs !px-2 !py-1" onclick="logout()" title="Cerrar sesión">
+            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
+          </button>
+        </div>
+      </div>
+
+      <!-- Mobile nav -->
+      <div class="md:hidden px-3 pb-3 overflow-x-auto scroll-thin">
+        <div class="flex gap-2 text-xs">
+          <button data-nav="dashboard" class="nav-item active px-3 py-1.5 rounded-lg text-muted">Dashboard</button>
+          <button data-nav="pos" class="nav-item px-3 py-1.5 rounded-lg text-muted">POS</button>
+          <button data-nav="inventario" class="nav-item px-3 py-1.5 rounded-lg text-muted">Inventario</button>
+          <button data-nav="gastos" class="nav-item px-3 py-1.5 rounded-lg text-muted">Gastos</button>
+          <button data-nav="reportes" class="nav-item px-3 py-1.5 rounded-lg text-muted">Reportes</button>
+          <button data-nav="usuarios" data-role="admin" class="nav-item px-3 py-1.5 rounded-lg text-muted">Usuarios</button>
+          <button data-nav="configuracion" data-role="admin" class="nav-item px-3 py-1.5 rounded-lg text-muted">Configuración</button>
+        </div>
+      </div>
+    </header>
+
+    <!-- CONTENT AREA -->
+    <section id="view" class="px-4 md:px-8 py-6 md:py-8 space-y-6"></section>
+  </main>
+</div>
+
+<!-- TOAST -->
+<div id="toast" class="fixed bottom-6 right-6 hidden glass-strong px-4 py-3 text-sm text-ink shadow-glow"></div>
+
+<!-- MODAL ROOT -->
+<div id="modal-root"></div>
+
+<!-- LOGIN OVERLAY -->
+<div id="login-overlay" class="fixed inset-0 z-[100] hidden items-center justify-center p-4"
+     style="background:
+        radial-gradient(800px 500px at 15% 20%, rgba(0,242,255,0.12), transparent 60%),
+        radial-gradient(900px 600px at 85% 80%, rgba(99,102,241,0.12), transparent 60%),
+        #020617;">
+  <div class="glass-strong neon-border w-full max-w-md p-8 fade-in">
+    <div class="flex items-center gap-3 mb-6">
+      <div class="w-11 h-11 rounded-xl neon-border flex items-center justify-center">
+        <svg viewBox="0 0 24 24" class="w-6 h-6" fill="none" stroke="#00f2ff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7l9 5 9-5-9-5Z"/><path d="m3 17 9 5 9-5"/><path d="m3 12 9 5 9-5"/></svg>
+      </div>
+      <div>
+        <div class="text-base font-bold tracking-wide">NEXO CORE</div>
+        <div class="text-[10px] text-muted tracking-[0.25em]">V3 · ACCESO SEGURO</div>
+      </div>
+    </div>
+
+    <h2 class="text-xl font-semibold mb-1">Iniciar sesión</h2>
+    <p class="text-sm text-muted mb-6">Ingresá tus credenciales para acceder al ERP.</p>
+
+    <form id="form-login" class="space-y-3">
+      <div>
+        <label class="text-xs uppercase tracking-widest text-muted">Usuario</label>
+        <input class="input mt-1" name="user" autocomplete="username" autofocus required />
+      </div>
+      <div>
+        <label class="text-xs uppercase tracking-widest text-muted">Clave</label>
+        <input class="input mt-1" name="pass" type="password" autocomplete="current-password" required />
+      </div>
+      <div id="login-error" class="hidden text-xs text-danger px-3 py-2 rounded-lg" style="background:rgba(244,63,94,0.08); border:1px solid rgba(244,63,94,0.3);"></div>
+      <button class="btn btn-primary w-full mt-2">Ingresar</button>
+    </form>
+
+    <div class="divider my-5"></div>
+    <div class="text-[11px] uppercase tracking-widest text-muted mb-2">Cuentas de prueba</div>
+    <div class="grid grid-cols-1 gap-2 text-xs">
+      <button type="button" class="glass p-2.5 text-left hover:neon-border transition" onclick="prefillLogin('admin','nexo2026')">
+        <div class="font-semibold">Super Admin</div>
+        <div class="text-muted">admin / nexo2026 · acceso total a todos los comercios</div>
+      </button>
+      <button type="button" class="glass p-2.5 text-left hover:neon-border transition" onclick="prefillLogin('ferreteria','cliente123')">
+        <div class="font-semibold">Cliente — Ferretería El Centro</div>
+        <div class="text-muted">ferreteria / cliente123 · solo su comercio</div>
+      </button>
+    </div>
+  </div>
+</div>
+
+<script>
+/* =========================================================
+   NEXO CORE V3 — Estado Global Multi-Tenant
+   ========================================================= */
+const STATE = {
+  bcv: 36.50,
+  currentTenant: 'ferreteria',
+  tenants: {
+    ferreteria: {
+      name: 'Ferretería El Centro',
+      type: 'Ferretería',
+      city: 'Caracas',
+      manager: 'Luis Hernández',
+      kpis: { ventasUSD: 18420, ticketProm: 42.10, productos: 248, clientes: 612 },
+      inventario: [
+        { sku: 'FE-001', nombre: 'Taladro Inalámbrico 18V', stock: 22, costoUSD: 65, precioUSD: 119, moneda: 'USD' },
+        { sku: 'FE-002', nombre: 'Caja Tornillos 1/4" x100', stock: 140, costoUSD: 3.2, precioUSD: 6.5, moneda: 'USD' },
+        { sku: 'FE-003', nombre: 'Cemento Gris 42.5 kg', stock: 80, costoUSD: 7, precioUSD: 12, moneda: 'USD' },
+        { sku: 'FE-004', nombre: 'Pintura Látex Blanca 1Gal', stock: 35, costoUSD: 14, precioUSD: 24, moneda: 'USD' },
+        { sku: 'FE-005', nombre: 'Cinta Aislante Negra', stock: 320, costoBS: 45, precioBS: 90, moneda: 'BS' },
+        { sku: 'FE-006', nombre: 'Llave Inglesa 12"', stock: 18, costoUSD: 9, precioUSD: 17, moneda: 'USD' },
+      ],
+      gastos: [
+        { fecha: '2026-04-22', categoria: 'Alquiler', desc: 'Local comercial Abril', monto: 850, moneda: 'USD' },
+        { fecha: '2026-04-23', categoria: 'Servicios', desc: 'Electricidad CORPOELEC', monto: 1200, moneda: 'BS' },
+        { fecha: '2026-04-25', categoria: 'Logística', desc: 'Flete proveedor cemento', monto: 120, moneda: 'USD' },
+        { fecha: '2026-04-27', categoria: 'Nómina', desc: 'Quincena vendedores', monto: 640, moneda: 'USD' },
+      ],
+      ventasMes: [12, 18, 14, 22, 19, 26, 24, 28, 23, 31, 29, 35],
+      productos: [
+        { nombre: 'Taladro Inalámbrico 18V', precio: 119 },
+        { nombre: 'Cemento 42.5 kg', precio: 12 },
+        { nombre: 'Pintura Látex 1Gal', precio: 24 },
+        { nombre: 'Llave Inglesa 12"', precio: 17 },
+        { nombre: 'Caja Tornillos x100', precio: 6.5 },
+        { nombre: 'Cinta Aislante', precio: 2.5 },
+      ],
+      ventas: [],
+    },
+    farmacia: {
+      name: 'Farmacia Global',
+      type: 'Farmacia',
+      city: 'Valencia',
+      manager: 'María Rodríguez',
+      kpis: { ventasUSD: 27890, ticketProm: 18.40, productos: 612, clientes: 1840 },
+      inventario: [
+        { sku: 'FA-001', nombre: 'Acetaminofén 500mg x20', stock: 320, costoUSD: 1.2, precioUSD: 2.5, moneda: 'USD' },
+        { sku: 'FA-002', nombre: 'Ibuprofeno 400mg x10', stock: 210, costoUSD: 1.8, precioUSD: 3.4, moneda: 'USD' },
+        { sku: 'FA-003', nombre: 'Amoxicilina 500mg x12', stock: 95, costoUSD: 4.5, precioUSD: 8, moneda: 'USD' },
+        { sku: 'FA-004', nombre: 'Vitamina C 1000mg x30', stock: 180, costoUSD: 3, precioUSD: 6, moneda: 'USD' },
+        { sku: 'FA-005', nombre: 'Alcohol Isopropílico 1L', stock: 60, costoBS: 90, precioBS: 180, moneda: 'BS' },
+        { sku: 'FA-006', nombre: 'Mascarilla Quirúrgica x50', stock: 420, costoUSD: 2.5, precioUSD: 5.5, moneda: 'USD' },
+      ],
+      gastos: [
+        { fecha: '2026-04-20', categoria: 'Alquiler', desc: 'Local farmacia Abril', monto: 1400, moneda: 'USD' },
+        { fecha: '2026-04-22', categoria: 'Servicios', desc: 'Internet + telefonía', monto: 95, moneda: 'USD' },
+        { fecha: '2026-04-24', categoria: 'Compras', desc: 'Lote antibióticos', monto: 3200, moneda: 'USD' },
+        { fecha: '2026-04-26', categoria: 'Nómina', desc: 'Quincena farmacéuticos', monto: 1800, moneda: 'USD' },
+      ],
+      ventasMes: [22, 25, 27, 30, 28, 33, 35, 38, 36, 41, 44, 47],
+      productos: [
+        { nombre: 'Acetaminofén 500mg', precio: 2.5 },
+        { nombre: 'Ibuprofeno 400mg', precio: 3.4 },
+        { nombre: 'Amoxicilina 500mg', precio: 8 },
+        { nombre: 'Vitamina C 1000mg', precio: 6 },
+        { nombre: 'Mascarilla x50', precio: 5.5 },
+        { nombre: 'Alcohol 1L', precio: 4.9 },
+      ],
+      ventas: [],
+    }
+  },
+  usuarios: [
+    { nombre: 'Luis Hernández',  email: 'luis@nexo.io',   rol: 'Gerente',     comercio: 'ferreteria', estado: 'Activo' },
+    { nombre: 'Carla Pérez',     email: 'carla@nexo.io',  rol: 'Vendedor',    comercio: 'ferreteria', estado: 'Activo' },
+    { nombre: 'María Rodríguez', email: 'maria@nexo.io',  rol: 'Gerente',     comercio: 'farmacia',   estado: 'Activo' },
+    { nombre: 'Daniel Torres',   email: 'daniel@nexo.io', rol: 'Farmacéutico',comercio: 'farmacia',   estado: 'Activo' },
+    { nombre: 'Andrés Vega',     email: 'andres@nexo.io', rol: 'Super Admin', comercio: 'all',        estado: 'Activo' },
+  ],
+  cart: [],
+  view: 'dashboard',
+};
+
+/* =========================================================
+   Persistencia (localStorage)
+   ========================================================= */
+const LS_KEY = 'nexo_core_v3_data';
+
+function loadFromStorage() {
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return;
+    const data = JSON.parse(raw);
+    if (typeof data.bcv === 'number') STATE.bcv = data.bcv;
+    if (data.tenants) {
+      Object.entries(data.tenants).forEach(([k, t]) => {
+        if (STATE.tenants[k]) {
+          if (Array.isArray(t.inventario)) STATE.tenants[k].inventario = t.inventario;
+          if (Array.isArray(t.gastos))     STATE.tenants[k].gastos = t.gastos;
+          if (Array.isArray(t.ventas))     STATE.tenants[k].ventas = t.ventas;
+        }
+      });
+    }
+  } catch (err) {
+    console.warn('No se pudo leer el almacenamiento local', err);
+  }
+}
+
+function saveToStorage() {
+  const data = {
+    bcv: STATE.bcv,
+    tenants: Object.fromEntries(
+      Object.entries(STATE.tenants).map(([k, t]) => [k, {
+        inventario: t.inventario,
+        gastos: t.gastos,
+        ventas: t.ventas,
+      }])
+    ),
+  };
+  try { localStorage.setItem(LS_KEY, JSON.stringify(data)); }
+  catch (err) { console.warn('No se pudo guardar en almacenamiento local', err); }
+}
+
+function resetStorage() {
+  localStorage.removeItem(LS_KEY);
+  location.reload();
+}
+
+/* =========================================================
+   Utilidades
+   ========================================================= */
+const $ = (sel, ctx=document) => ctx.querySelector(sel);
+const $$ = (sel, ctx=document) => Array.from(ctx.querySelectorAll(sel));
+const fmtUSD = n => '$' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtBS  = n => 'Bs ' + Number(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const usdToBs = usd => usd * STATE.bcv;
+const bsToUsd = bs  => bs / STATE.bcv;
+
+function toast(msg) {
+  const t = $('#toast');
+  t.textContent = msg;
+  t.classList.remove('hidden');
+  clearTimeout(window.__toastT);
+  window.__toastT = setTimeout(() => t.classList.add('hidden'), 2200);
+}
+
+function tenant() { return STATE.tenants[STATE.currentTenant]; }
+
+/* =========================================================
+   Render principal
+   ========================================================= */
+function render() {
+  // Si hay sesión activa, aplicar permisos y forzar tenant antes de renderizar
+  if (typeof applySessionToUI === 'function' && STATE.session) {
+    applySessionToUI();
+  }
+
+  $('#bcv-side').textContent = STATE.bcv.toFixed(2);
+  $('#tenant-title').textContent = tenant().name;
+
+  $$('#tenant-switcher').forEach(s => s.value = STATE.currentTenant);
+  $$('.nav-item').forEach(b => {
+    b.classList.toggle('active', b.dataset.nav === STATE.view);
+  });
+
+  const view = $('#view');
+  view.innerHTML = '';
+  view.appendChild(VIEWS[STATE.view]());
+  view.classList.remove('fade-in'); void view.offsetWidth; view.classList.add('fade-in');
+}
+
+/* =========================================================
+   Componentes / Vistas
+   ========================================================= */
+const VIEWS = {
+  dashboard() {
+    const t = tenant();
+    const ventasBs = usdToBs(t.kpis.ventasUSD);
+    const totalGastosUSD = t.gastos.reduce((acc, g) => acc + (g.moneda === 'USD' ? g.monto : bsToUsd(g.monto)), 0);
+    const valorInvUSD = t.inventario.reduce((acc, p) => {
+      const costo = p.moneda === 'USD' ? p.costoUSD : bsToUsd(p.costoBS);
+      return acc + costo * p.stock;
+    }, 0);
+
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        ${kpiCard('Ventas del mes', fmtUSD(t.kpis.ventasUSD), fmtBS(ventasBs), 'up', '+12.4%')}
+        ${kpiCard('Ticket promedio', fmtUSD(t.kpis.ticketProm), fmtBS(usdToBs(t.kpis.ticketProm)), 'up', '+3.1%')}
+        ${kpiCard('Productos activos', t.kpis.productos.toLocaleString(), t.type, 'flat', '')}
+        ${kpiCard('Clientes únicos', t.kpis.clientes.toLocaleString(), 'Últimos 30 días', 'up', '+8.7%')}
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
+        <div class="glass p-5 lg:col-span-2">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <div class="text-[11px] uppercase tracking-widest text-muted">Tendencia de ventas</div>
+              <div class="text-lg font-semibold">${t.name}</div>
+            </div>
+            <span class="badge-neon text-[11px] px-2 py-1 rounded-md">12 meses</span>
+          </div>
+          ${barChart(t.ventasMes)}
+        </div>
+
+        <div class="glass p-5">
+          <div class="text-[11px] uppercase tracking-widest text-muted mb-3">Resumen financiero</div>
+          <div class="space-y-3 text-sm">
+            <div class="flex justify-between"><span class="text-muted">Ingresos USD</span><span class="font-semibold">${fmtUSD(t.kpis.ventasUSD)}</span></div>
+            <div class="flex justify-between"><span class="text-muted">Ingresos BS</span><span class="font-semibold">${fmtBS(ventasBs)}</span></div>
+            <div class="divider"></div>
+            <div class="flex justify-between"><span class="text-muted">Egresos totales</span><span class="font-semibold">${fmtUSD(totalGastosUSD)}</span></div>
+            <div class="flex justify-between"><span class="text-muted">Valor de inventario</span><span class="font-semibold">${fmtUSD(valorInvUSD)}</span></div>
+            <div class="divider"></div>
+            <div class="flex justify-between items-end">
+              <span class="text-muted">Utilidad estimada</span>
+              <span class="text-xl font-bold neon-text">${fmtUSD(t.kpis.ventasUSD - totalGastosUSD)}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+        <div class="glass p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-sm font-semibold">Top productos · ${t.type}</div>
+            <span class="text-[11px] text-muted">Precio en USD</span>
+          </div>
+          <div class="space-y-2">
+            ${t.productos.slice(0,5).map(p => `
+              <div class="flex items-center justify-between px-3 py-2 rounded-lg hover:bg-white/5">
+                <span class="text-sm">${p.nombre}</span>
+                <span class="text-sm font-semibold">${fmtUSD(p.precio)} <span class="text-muted text-xs">· ${fmtBS(usdToBs(p.precio))}</span></span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <div class="glass p-5">
+          <div class="text-sm font-semibold mb-3">Información del tenant</div>
+          <div class="grid grid-cols-2 gap-3 text-sm">
+            <div><div class="text-muted text-xs">Razón social</div><div class="font-medium">${t.name}</div></div>
+            <div><div class="text-muted text-xs">Tipo</div><div class="font-medium">${t.type}</div></div>
+            <div><div class="text-muted text-xs">Ciudad</div><div class="font-medium">${t.city}</div></div>
+            <div><div class="text-muted text-xs">Gerente</div><div class="font-medium">${t.manager}</div></div>
+            <div class="col-span-2 mt-2 glass p-3 flex items-center justify-between">
+              <div>
+                <div class="text-[11px] uppercase tracking-widest text-muted">Tasa BCV aplicada</div>
+                <div class="text-lg font-bold neon-text">Bs ${STATE.bcv.toFixed(2)} <span class="text-muted text-xs font-normal">/ USD</span></div>
+              </div>
+              <button class="btn btn-ghost text-xs" onclick="setView('configuracion')">Actualizar</button>
+            </div>
+          </div>
+        </div>
+      </div>
+    `;
+    return wrap;
+  },
+
+  pos() {
+    const t = tenant();
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="glass p-5 lg:col-span-2">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <div class="text-[11px] uppercase tracking-widest text-muted">Punto de Venta</div>
+              <div class="text-lg font-semibold">${t.name}</div>
+            </div>
+            <input id="pos-search" type="text" placeholder="Buscar producto..." class="input max-w-xs" />
+          </div>
+          <div id="pos-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></div>
+        </div>
+
+        <div class="glass p-5 flex flex-col">
+          <div class="text-sm font-semibold mb-3">Carrito</div>
+          <div id="cart-list" class="flex-1 space-y-2 overflow-auto scroll-thin max-h-[420px] pr-1"></div>
+          <div class="divider my-3"></div>
+          <div class="space-y-2 text-sm">
+            <div class="flex justify-between"><span class="text-muted">Subtotal USD</span><span id="cart-usd" class="font-semibold">$0.00</span></div>
+            <div class="flex justify-between"><span class="text-muted">Equivalente BS</span><span id="cart-bs" class="font-semibold">Bs 0.00</span></div>
+            <div class="flex justify-between text-xs text-muted"><span>Tasa BCV</span><span>Bs ${STATE.bcv.toFixed(2)}</span></div>
+          </div>
+          <div class="flex gap-2 mt-4">
+            <button class="btn btn-ghost flex-1 text-sm" onclick="STATE.cart=[]; renderPOS();">Vaciar</button>
+            <button class="btn btn-primary flex-1 text-sm" onclick="checkout()">Cobrar</button>
+          </div>
+        </div>
+      </div>
+    `;
+    setTimeout(() => {
+      $('#pos-search').addEventListener('input', renderPOS);
+      renderPOS();
+    }, 0);
+    return wrap;
+  },
+
+  inventario() {
+    const t = tenant();
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+        <div>
+          <div class="text-[11px] uppercase tracking-widest text-muted">Inventario multimoneda</div>
+          <h2 class="text-xl font-semibold">${t.name}</h2>
+        </div>
+        <div class="flex gap-2">
+          <button class="btn btn-ghost text-sm" onclick="exportInventarioCSV()">Exportar Excel</button>
+          <button class="btn btn-ghost text-sm" onclick="exportInventarioPDF()">Exportar PDF</button>
+          <button class="btn btn-primary text-sm" id="btn-add-prod">+ Nuevo producto</button>
+        </div>
+      </div>
+
+      <div class="glass mt-4 overflow-hidden">
+        <div class="table-scroll scroll-thin">
+          <table>
+            <thead>
+              <tr>
+                <th>SKU</th><th>Producto</th><th>Stock</th><th>Costo</th><th>Precio USD</th><th>Equivalente BS</th><th></th>
+              </tr>
+            </thead>
+            <tbody>
+              ${t.inventario.length === 0 ? `
+                <tr><td colspan="7" class="text-center text-muted py-10">Sin productos cargados. Agregá el primero abajo.</td></tr>
+              ` : t.inventario.map((p, idx) => {
+                const precioUSD = p.moneda === 'USD' ? p.precioUSD : bsToUsd(p.precioBS);
+                const costoStr  = p.moneda === 'USD'
+                  ? (p.costoUSD != null ? fmtUSD(p.costoUSD) : '—')
+                  : (p.costoBS  != null ? fmtBS(p.costoBS)  : '—');
+                return `
+                  <tr>
+                    <td class="text-muted">${p.sku || '—'}</td>
+                    <td class="font-medium">${p.nombre}</td>
+                    <td>${p.stock}</td>
+                    <td>${costoStr}</td>
+                    <td class="font-semibold">${fmtUSD(precioUSD)}</td>
+                    <td class="text-neon">${fmtBS(usdToBs(precioUSD))}</td>
+                    <td class="text-right">
+                      <button class="btn btn-danger text-xs" onclick="deleteProduct(${idx})">Eliminar</button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="glass mt-4 p-5">
+        <div class="flex items-center justify-between mb-3">
+          <div class="text-sm font-semibold">Cargar producto en ${t.name}</div>
+          <div class="text-xs text-muted">Tasa BCV vigente: <span class="neon-text font-semibold">Bs ${STATE.bcv.toFixed(2)}</span></div>
+        </div>
+        <form id="form-prod" class="grid grid-cols-1 md:grid-cols-6 gap-3 text-sm">
+          <input class="input md:col-span-2" name="nombre" placeholder="Nombre del producto" required />
+          <input class="input" name="stock" type="number" min="0" placeholder="Stock" required />
+          <input class="input" name="precio" id="prod-precio" type="number" step="0.01" min="0" placeholder="Precio USD" required />
+          <input class="input bg-base/40" id="prod-precio-bs" type="text" placeholder="Equivalente BS (auto)" readonly />
+          <button class="btn btn-primary">Agregar</button>
+        </form>
+        <div class="text-xs text-muted mt-2">El equivalente en bolívares se calcula automáticamente con la tasa BCV actual y se actualiza si cambiás la tasa.</div>
+      </div>
+    `;
+    setTimeout(() => {
+      const precio = $('#prod-precio');
+      const precioBs = $('#prod-precio-bs');
+      const updateBs = () => {
+        const v = Number(precio.value);
+        precioBs.value = v > 0 ? fmtBS(usdToBs(v)) : '';
+      };
+      precio.addEventListener('input', updateBs);
+
+      $('#form-prod').addEventListener('submit', e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const nombre = String(fd.get('nombre')).trim();
+        const stock  = Number(fd.get('stock'));
+        const precioUSD = Number(fd.get('precio'));
+        if (!nombre || precioUSD <= 0) { toast('Datos inválidos'); return; }
+
+        const sku = 'P-' + Date.now().toString(36).toUpperCase().slice(-5);
+        const item = { sku, nombre, stock, moneda: 'USD', precioUSD, costoUSD: +(precioUSD * 0.6).toFixed(2) };
+        tenant().inventario.unshift(item);
+        tenant().productos.unshift({ nombre, precio: precioUSD });
+        saveToStorage();
+        toast(`"${nombre}" agregado · ${fmtUSD(precioUSD)} · ${fmtBS(usdToBs(precioUSD))}`);
+        render();
+      });
+
+      $('#btn-add-prod').addEventListener('click', () => $('#form-prod').scrollIntoView({behavior:'smooth'}));
+    }, 0);
+    return wrap;
+  },
+
+  gastos() {
+    const t = tenant();
+    const totalUSD = t.gastos.reduce((a,g) => a + (g.moneda === 'USD' ? g.monto : bsToUsd(g.monto)), 0);
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+        <div>
+          <div class="text-[11px] uppercase tracking-widest text-muted">Gastos / Egresos</div>
+          <h2 class="text-xl font-semibold">${t.name}</h2>
+        </div>
+        <div class="glass px-4 py-3">
+          <div class="text-[11px] uppercase tracking-widest text-muted">Total egresos del mes</div>
+          <div class="text-xl font-bold neon-text">${fmtUSD(totalUSD)} <span class="text-muted text-xs font-normal">· ${fmtBS(usdToBs(totalUSD))}</span></div>
+        </div>
+      </div>
+
+      <div class="glass mt-4 p-5">
+        <div class="text-sm font-semibold mb-3">Registrar nuevo gasto</div>
+        <form id="form-gasto" class="grid grid-cols-1 md:grid-cols-6 gap-3 text-sm">
+          <input class="input" type="date" name="fecha" required />
+          <select class="select" name="categoria">
+            <option>Alquiler</option><option>Servicios</option><option>Nómina</option>
+            <option>Logística</option><option>Compras</option><option>Otros</option>
+          </select>
+          <input class="input md:col-span-2" name="desc" placeholder="Descripción del egreso" required />
+          <input class="input" name="monto" type="number" step="0.01" placeholder="Monto" required />
+          <select class="select" name="moneda">
+            <option value="USD">USD</option>
+            <option value="BS">BS</option>
+          </select>
+          <button class="btn btn-primary md:col-span-6">Registrar gasto</button>
+        </form>
+      </div>
+
+      <div class="glass mt-4 overflow-hidden">
+        <div class="table-scroll scroll-thin">
+          <table>
+            <thead>
+              <tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Monto</th><th>Moneda</th><th>Equivalente USD</th><th></th></tr>
+            </thead>
+            <tbody>
+              ${t.gastos.length === 0 ? `
+                <tr><td colspan="7" class="text-center text-muted py-10">Sin gastos registrados.</td></tr>
+              ` : t.gastos.map((g, idx) => `
+                <tr>
+                  <td class="text-muted">${g.fecha}</td>
+                  <td><span class="badge-neon text-[10px] px-2 py-1 rounded-md">${g.categoria}</span></td>
+                  <td>${g.desc}</td>
+                  <td class="font-semibold">${g.moneda === 'USD' ? fmtUSD(g.monto) : fmtBS(g.monto)}</td>
+                  <td class="text-muted">${g.moneda}</td>
+                  <td>${g.moneda === 'USD' ? fmtUSD(g.monto) : fmtUSD(bsToUsd(g.monto))}</td>
+                  <td class="text-right"><button class="btn btn-danger text-xs" onclick="deleteGasto(${idx})">Eliminar</button></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    setTimeout(() => {
+      const today = new Date().toISOString().slice(0,10);
+      const fechaInput = $('#form-gasto').querySelector('input[name="fecha"]');
+      if (fechaInput && !fechaInput.value) fechaInput.value = today;
+
+      $('#form-gasto').addEventListener('submit', e => {
+        e.preventDefault();
+        const fd = new FormData(e.target);
+        const monto = Number(fd.get('monto'));
+        if (!monto || monto <= 0) { toast('Monto inválido'); return; }
+        tenant().gastos.unshift({
+          fecha: fd.get('fecha'),
+          categoria: fd.get('categoria'),
+          desc: fd.get('desc'),
+          monto,
+          moneda: fd.get('moneda'),
+        });
+        saveToStorage();
+        toast('Gasto registrado · Resumen financiero actualizado');
+        render();
+      });
+    }, 0);
+    return wrap;
+  },
+
+  reportes() {
+    const t = tenant();
+    const valorInvUSD = t.inventario.reduce((acc, p) => {
+      const costo = p.moneda === 'USD' ? (p.costoUSD || 0) : bsToUsd(p.costoBS || 0);
+      return acc + costo * p.stock;
+    }, 0);
+    const totalGastosUSD = t.gastos.reduce((a,g) => a + (g.moneda === 'USD' ? g.monto : bsToUsd(g.monto)), 0);
+    const ventas = t.ventas || [];
+    const ventasUSD = ventas.reduce((a,v) => a + v.totalUSD, 0);
+
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-2">
+        <div>
+          <div class="text-[11px] uppercase tracking-widest text-muted">Reportes</div>
+          <h2 class="text-xl font-semibold">${t.name}</h2>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <button class="btn btn-ghost text-sm" onclick="exportVentasCSV()">Exportar Excel</button>
+          <button class="btn btn-ghost text-sm" onclick="exportReporteFinancieroPDF()">Exportar PDF</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        ${reportCard('Ventas mes (estim.)', fmtUSD(t.kpis.ventasUSD), '12 meses', '#00f2ff')}
+        ${reportCard('Ventas POS reales', fmtUSD(ventasUSD), `${ventas.length} recibo(s)`, '#22d3ee')}
+        ${reportCard('Egresos', fmtUSD(totalGastosUSD), 'Mes en curso', '#fb7185')}
+        ${reportCard('Valor inventario', fmtUSD(valorInvUSD), 'A costo', '#a78bfa')}
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
+        <div class="glass p-5">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <div class="text-[11px] uppercase tracking-widest text-muted">Tendencia de ventas</div>
+              <div class="text-lg font-semibold">12 meses</div>
+            </div>
+            <button class="btn btn-ghost text-xs" onclick="exportReporteFinancieroPDF()">PDF</button>
+          </div>
+          ${barChart(t.ventasMes)}
+        </div>
+
+        <div class="glass p-5">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <div class="text-[11px] uppercase tracking-widest text-muted">Reporte de inventario</div>
+              <div class="text-lg font-semibold">Stock actual</div>
+            </div>
+            <div class="flex gap-2">
+              <button class="btn btn-ghost text-xs" onclick="exportInventarioCSV()">Excel</button>
+              <button class="btn btn-ghost text-xs" onclick="exportInventarioPDF()">PDF</button>
+            </div>
+          </div>
+          <div class="space-y-2">
+            ${t.inventario.length === 0 ? `<div class="text-muted text-sm text-center py-4">Sin productos</div>` :
+              t.inventario.slice(0,6).map(p => {
+                const max = Math.max(...t.inventario.map(x => x.stock), 1);
+                const w = Math.max(6, (p.stock / max) * 100);
+                return `
+                  <div>
+                    <div class="flex justify-between text-xs mb-1">
+                      <span class="text-muted">${p.nombre}</span>
+                      <span>${p.stock} u.</span>
+                    </div>
+                    <div class="h-2 rounded-full bg-white/5 overflow-hidden">
+                      <div class="h-full" style="width:${w}%; background: linear-gradient(90deg, #00f2ff, rgba(0,242,255,.3));"></div>
+                    </div>
+                  </div>
+                `;
+              }).join('')}
+          </div>
+        </div>
+      </div>
+
+      <div class="glass mt-4 p-5">
+        <div class="text-sm font-semibold mb-3">Estado de resultados (simplificado)</div>
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
+          <div><div class="text-muted text-xs">Ingresos (estim.)</div><div class="text-lg font-bold">${fmtUSD(t.kpis.ventasUSD)}</div></div>
+          <div><div class="text-muted text-xs">Egresos</div><div class="text-lg font-bold">${fmtUSD(totalGastosUSD)}</div></div>
+          <div><div class="text-muted text-xs">Utilidad</div><div class="text-lg font-bold neon-text">${fmtUSD(t.kpis.ventasUSD - totalGastosUSD)}</div></div>
+          <div><div class="text-muted text-xs">Margen</div><div class="text-lg font-bold">${(((t.kpis.ventasUSD - totalGastosUSD) / t.kpis.ventasUSD) * 100).toFixed(1)}%</div></div>
+        </div>
+      </div>
+
+      <div class="glass mt-4 overflow-hidden">
+        <div class="flex items-center justify-between p-5 pb-3">
+          <div>
+            <div class="text-[11px] uppercase tracking-widest text-muted">Histórico de ventas</div>
+            <div class="text-lg font-semibold">${ventas.length} recibo(s) · ${fmtUSD(ventasUSD)}</div>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-ghost text-xs" onclick="exportVentasCSV()">Exportar Excel</button>
+            ${ventas.length ? `<button class="btn btn-danger text-xs" onclick="clearVentas()">Limpiar histórico</button>` : ''}
+          </div>
+        </div>
+        <div class="table-scroll scroll-thin">
+          <table>
+            <thead>
+              <tr><th>Recibo</th><th>Fecha</th><th>Productos</th><th>Total USD</th><th>Total BS</th><th>BCV</th><th></th></tr>
+            </thead>
+            <tbody>
+              ${ventas.length === 0 ? `
+                <tr><td colspan="7" class="text-center text-muted py-10">Aún no hay ventas registradas. Hacé tu primera venta desde el POS.</td></tr>
+              ` : ventas.map(v => {
+                const items = v.items.map(i => `${i.qty}× ${i.nombre}`).join(', ');
+                return `
+                  <tr>
+                    <td class="font-mono text-xs neon-text">${v.id}</td>
+                    <td class="text-muted">${new Date(v.fecha).toLocaleString('es-VE')}</td>
+                    <td class="max-w-xs truncate" title="${items}">${items}</td>
+                    <td class="font-semibold">${fmtUSD(v.totalUSD)}</td>
+                    <td>${fmtBS(v.totalBS)}</td>
+                    <td class="text-muted text-xs">Bs ${v.bcv.toFixed(2)}</td>
+                    <td class="text-right"><button class="btn btn-ghost text-xs" onclick='reprintVenta("${v.id}")'>Ver</button></td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    return wrap;
+  },
+
+  usuarios() {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
+        <div>
+          <div class="text-[11px] uppercase tracking-widest text-muted">Gestión de usuarios</div>
+          <h2 class="text-xl font-semibold">Acceso por comercio</h2>
+        </div>
+        <button class="btn btn-primary text-sm" onclick="toast('Modal de invitación (simulado)')">+ Invitar usuario</button>
+      </div>
+
+      <div class="glass mt-4 overflow-hidden">
+        <div class="overflow-x-auto scroll-thin">
+          <table>
+            <thead>
+              <tr><th>Usuario</th><th>Email</th><th>Rol</th><th>Comercio</th><th>Estado</th><th></th></tr>
+            </thead>
+            <tbody>
+              ${STATE.usuarios.map(u => `
+                <tr>
+                  <td class="font-medium flex items-center gap-3">
+                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-neon/30 to-indigo-500/30 border border-line/40 flex items-center justify-center text-xs font-bold">${u.nombre.split(' ').map(s=>s[0]).slice(0,2).join('')}</div>
+                    ${u.nombre}
+                  </td>
+                  <td class="text-muted">${u.email}</td>
+                  <td><span class="badge-neon text-[10px] px-2 py-1 rounded-md">${u.rol}</span></td>
+                  <td>${u.comercio === 'all' ? '<span class="text-muted">Todos</span>' : STATE.tenants[u.comercio].name}</td>
+                  <td><span class="inline-flex items-center gap-2 text-xs"><span class="pulse-dot"></span>${u.estado}</span></td>
+                  <td class="text-right"><button class="btn btn-ghost text-xs">Editar</button></td>
+                </tr>
+              `).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    return wrap;
+  },
+
+  configuracion() {
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+        <div class="glass p-5">
+          <div class="text-[11px] uppercase tracking-widest text-muted">Tasa BCV global</div>
+          <div class="text-2xl font-bold neon-text mt-1">Bs ${STATE.bcv.toFixed(2)} <span class="text-muted text-sm font-normal">/ USD</span></div>
+          <p class="text-sm text-muted mt-2">Esta tasa se aplica automáticamente a todas las conversiones de cualquier comercio dentro de Nexo Core V3.</p>
+
+          <form id="form-bcv" class="mt-4 flex gap-2">
+            <input class="input" type="number" step="0.01" name="bcv" value="${STATE.bcv}" required />
+            <button class="btn btn-primary">Actualizar tasa</button>
+          </form>
+
+          <div class="divider my-5"></div>
+          <div class="text-[11px] uppercase tracking-widest text-muted mb-2">Conversor en vivo</div>
+          <div class="grid grid-cols-2 gap-3">
+            <div>
+              <label class="text-xs text-muted">USD</label>
+              <input id="conv-usd" type="number" value="100" class="input" />
+            </div>
+            <div>
+              <label class="text-xs text-muted">BS</label>
+              <input id="conv-bs" type="number" value="${(100 * STATE.bcv).toFixed(2)}" class="input" />
+            </div>
+          </div>
+        </div>
+
+        <div class="glass p-5">
+          <div class="text-sm font-semibold mb-3">Configuración del Super Admin</div>
+          <div class="space-y-3 text-sm">
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-medium">Nombre del sistema</div>
+                <div class="text-muted text-xs">Visible en sidebar y reportes</div>
+              </div>
+              <input class="input max-w-[200px]" value="Nexo Core V3" />
+            </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-medium">Moneda principal</div>
+                <div class="text-muted text-xs">Para reportes consolidados</div>
+              </div>
+              <select class="select max-w-[200px]"><option>USD</option><option>BS</option></select>
+            </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-medium">Modo oscuro</div>
+                <div class="text-muted text-xs">Tema visual del ERP</div>
+              </div>
+              <span class="badge-neon text-[10px] px-2 py-1 rounded-md">Activado</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <div>
+                <div class="font-medium">Comercios activos</div>
+                <div class="text-muted text-xs">Tenants registrados</div>
+              </div>
+              <span class="text-lg font-bold">${Object.keys(STATE.tenants).length}</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="glass mt-4 p-5">
+        <div class="text-sm font-semibold mb-3">Tenants registrados</div>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
+          ${Object.entries(STATE.tenants).map(([k,t]) => `
+            <div class="glass p-4 flex items-center justify-between">
+              <div>
+                <div class="font-semibold">${t.name}</div>
+                <div class="text-xs text-muted">${t.type} · ${t.city}</div>
+              </div>
+              <button class="btn btn-ghost text-xs" onclick="STATE.currentTenant='${k}'; render(); toast('Tenant activo: ${t.name}');">Activar</button>
+            </div>
+          `).join('')}
+        </div>
+      </div>
+
+      <div class="glass mt-4 p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
+        <div>
+          <div class="text-sm font-semibold">Almacenamiento local</div>
+          <div class="text-xs text-muted">Tasa BCV, inventario y gastos se guardan en este navegador. Al refrescar, los datos se conservan.</div>
+        </div>
+        <button id="btn-reset" class="btn btn-danger text-sm">Restaurar datos iniciales</button>
+      </div>
+    `;
+
+    setTimeout(() => {
+      $('#form-bcv').addEventListener('submit', e => {
+        e.preventDefault();
+        const v = Number(new FormData(e.target).get('bcv'));
+        if (!v || v <= 0) return;
+        STATE.bcv = v;
+        saveToStorage();
+        toast(`Tasa BCV actualizada a Bs ${v.toFixed(2)} / USD`);
+        render();
+      });
+      const usd = $('#conv-usd'), bs = $('#conv-bs');
+      usd.addEventListener('input', () => bs.value = (Number(usd.value) * STATE.bcv).toFixed(2));
+      bs.addEventListener('input', () => usd.value = (Number(bs.value) / STATE.bcv).toFixed(2));
+
+      const btnReset = $('#btn-reset');
+      if (btnReset) btnReset.addEventListener('click', () => {
+        if (confirm('¿Restaurar datos iniciales? Se borrarán tus productos, gastos y tasa BCV guardados.')) {
+          resetStorage();
+        }
+      });
+    }, 0);
+
+    return wrap;
+  },
+};
+
+/* =========================================================
+   POS helpers
+   ========================================================= */
+function renderPOS() {
+  const t = tenant();
+  const q = ($('#pos-search')?.value || '').toLowerCase();
+  const grid = $('#pos-grid');
+  if (!grid) return;
+  grid.innerHTML = t.productos
+    .filter(p => p.nombre.toLowerCase().includes(q))
+    .map((p, i) => `
+      <button class="glass p-3 text-left hover:neon-border transition" onclick="addToCart(${i})">
+        <div class="text-xs text-muted">${t.type}</div>
+        <div class="font-semibold text-sm leading-tight mt-1">${p.nombre}</div>
+        <div class="mt-2 text-neon font-bold">${fmtUSD(p.precio)}</div>
+        <div class="text-[11px] text-muted">${fmtBS(usdToBs(p.precio))}</div>
+      </button>
+    `).join('');
+
+  const list = $('#cart-list');
+  if (STATE.cart.length === 0) {
+    list.innerHTML = `<div class="text-muted text-sm text-center py-8">Carrito vacío</div>`;
+  } else {
+    list.innerHTML = STATE.cart.map((c,i) => `
+      <div class="glass p-3 flex items-center justify-between">
+        <div>
+          <div class="text-sm font-medium">${c.nombre}</div>
+          <div class="text-xs text-muted">${fmtUSD(c.precio)} · ${fmtBS(usdToBs(c.precio))}</div>
+        </div>
+        <div class="flex items-center gap-2">
+          <button class="btn btn-ghost !py-0.5 !px-2 text-sm" onclick="changeQty(${i},-1)">−</button>
+          <span class="w-6 text-center text-sm">${c.qty}</span>
+          <button class="btn btn-ghost !py-0.5 !px-2 text-sm" onclick="changeQty(${i},1)">+</button>
+        </div>
+      </div>
+    `).join('');
+  }
+  const totalUSD = STATE.cart.reduce((a,c) => a + c.precio * c.qty, 0);
+  $('#cart-usd').textContent = fmtUSD(totalUSD);
+  $('#cart-bs').textContent = fmtBS(usdToBs(totalUSD));
+}
+function addToCart(i) {
+  const p = tenant().productos[i];
+  const found = STATE.cart.find(c => c.nombre === p.nombre);
+  if (found) found.qty++;
+  else STATE.cart.push({ ...p, qty: 1 });
+  renderPOS();
+}
+function changeQty(i, d) {
+  STATE.cart[i].qty += d;
+  if (STATE.cart[i].qty <= 0) STATE.cart.splice(i,1);
+  renderPOS();
+}
+function checkout() {
+  if (!STATE.cart.length) { toast('El carrito está vacío'); return; }
+  const totalUSD = STATE.cart.reduce((a,c) => a + c.precio * c.qty, 0);
+  // Descuento de stock si el producto existe en el inventario
+  const inv = tenant().inventario;
+  STATE.cart.forEach(c => {
+    const p = inv.find(x => x.nombre === c.nombre);
+    if (p && typeof p.stock === 'number') p.stock = Math.max(0, p.stock - c.qty);
+  });
+  // Persistir venta en histórico
+  const venta = {
+    id: 'V-' + Date.now().toString(36).toUpperCase(),
+    fecha: new Date().toISOString(),
+    tenantKey: STATE.currentTenant,
+    tenantName: tenant().name,
+    items: STATE.cart.map(c => ({ nombre: c.nombre, qty: c.qty, precio: c.precio })),
+    totalUSD,
+    bcv: STATE.bcv,
+    totalBS: usdToBs(totalUSD),
+  };
+  tenant().ventas = tenant().ventas || [];
+  tenant().ventas.unshift(venta);
+  saveToStorage();
+  STATE.cart = [];
+  renderPOS();
+  openReceiptModal(venta);
+}
+
+/* =========================================================
+   Modal de Recibo
+   ========================================================= */
+function openReceiptModal(venta) {
+  const root = $('#modal-root');
+  const fecha = new Date(venta.fecha);
+  const fechaStr = fecha.toLocaleDateString('es-VE') + ' · ' + fecha.toLocaleTimeString('es-VE', {hour:'2-digit', minute:'2-digit'});
+  root.innerHTML = `
+    <div class="modal-backdrop" id="modal-backdrop">
+      <div class="glass-strong modal-card neon-border" id="print-area">
+        <div class="p-6">
+          <div class="flex items-start justify-between mb-4">
+            <div>
+              <div class="text-[10px] uppercase tracking-[0.25em] text-muted">Recibo de venta</div>
+              <div class="text-xl font-bold mt-0.5">${venta.tenantName}</div>
+              <div class="text-xs text-muted">Nexo Core V3 · ${fechaStr}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-[10px] uppercase tracking-[0.2em] text-muted">N°</div>
+              <div class="font-mono text-sm neon-text">${venta.id}</div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="py-3">
+            <div class="grid grid-cols-12 text-[10px] uppercase tracking-widest text-muted mb-2">
+              <div class="col-span-6">Producto</div>
+              <div class="col-span-2 text-center">Cant.</div>
+              <div class="col-span-2 text-right">P.U.</div>
+              <div class="col-span-2 text-right">Subt.</div>
+            </div>
+            ${venta.items.map(it => `
+              <div class="grid grid-cols-12 text-sm py-1.5">
+                <div class="col-span-6 truncate">${it.nombre}</div>
+                <div class="col-span-2 text-center">${it.qty}</div>
+                <div class="col-span-2 text-right">${fmtUSD(it.precio)}</div>
+                <div class="col-span-2 text-right font-semibold">${fmtUSD(it.precio * it.qty)}</div>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="py-3 space-y-1.5 text-sm">
+            <div class="flex justify-between text-muted"><span>Tasa BCV aplicada</span><span>Bs ${venta.bcv.toFixed(2)} / USD</span></div>
+            <div class="flex justify-between"><span class="text-muted">Total USD</span><span class="font-semibold">${fmtUSD(venta.totalUSD)}</span></div>
+            <div class="flex justify-between items-end pt-1">
+              <span class="text-muted">Total BS</span>
+              <span class="text-2xl font-bold neon-text">${fmtBS(venta.totalBS)}</span>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="text-center text-[11px] text-muted py-3">
+            Gracias por su compra · Documento simulado · No fiscal
+          </div>
+
+          <div class="flex gap-2 no-print">
+            <button class="btn btn-ghost flex-1 text-sm" onclick="closeModal()">Cerrar</button>
+            <button class="btn btn-primary flex-1 text-sm" onclick="window.print()">Imprimir</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  $('#modal-backdrop').addEventListener('click', e => {
+    if (e.target.id === 'modal-backdrop') closeModal();
+  });
+}
+
+function closeModal() {
+  $('#modal-root').innerHTML = '';
+}
+
+/* =========================================================
+   Exportación (CSV / PDF vía impresión)
+   ========================================================= */
+function downloadCSV(filename, rows) {
+  const csv = rows.map(r => r.map(cell => {
+    const s = String(cell ?? '');
+    return /[",\n;]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+  }).join(',')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportInventarioCSV() {
+  const t = tenant();
+  const rows = [['SKU','Producto','Stock','Precio USD','Equivalente BS','Tasa BCV']];
+  t.inventario.forEach(p => {
+    const precioUSD = p.moneda === 'USD' ? p.precioUSD : bsToUsd(p.precioBS);
+    rows.push([p.sku || '', p.nombre, p.stock, precioUSD.toFixed(2), usdToBs(precioUSD).toFixed(2), STATE.bcv.toFixed(2)]);
+  });
+  downloadCSV(`inventario-${STATE.currentTenant}-${Date.now()}.csv`, rows);
+  toast('Inventario exportado a CSV');
+}
+
+function exportVentasCSV() {
+  const t = tenant();
+  const rows = [['Recibo','Fecha','Productos','Total USD','Total BS','Tasa BCV']];
+  (t.ventas || []).forEach(v => {
+    const items = v.items.map(i => `${i.qty}x ${i.nombre}`).join(' | ');
+    rows.push([v.id, new Date(v.fecha).toLocaleString('es-VE'), items, v.totalUSD.toFixed(2), v.totalBS.toFixed(2), v.bcv.toFixed(2)]);
+  });
+  downloadCSV(`ventas-${STATE.currentTenant}-${Date.now()}.csv`, rows);
+  toast('Reporte de ventas exportado a CSV');
+}
+
+function exportInventarioPDF() {
+  const t = tenant();
+  const root = $('#modal-root');
+  root.innerHTML = `
+    <div class="modal-backdrop" id="modal-backdrop">
+      <div class="glass-strong modal-card neon-border" id="print-area" style="max-width:720px;">
+        <div class="p-6">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="text-[10px] uppercase tracking-[0.25em] text-muted">Reporte de Inventario</div>
+              <div class="text-xl font-bold mt-0.5">${t.name}</div>
+              <div class="text-xs text-muted">Nexo Core V3 · ${new Date().toLocaleDateString('es-VE')}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-[10px] uppercase tracking-[0.2em] text-muted">Tasa BCV</div>
+              <div class="font-mono text-sm neon-text">Bs ${STATE.bcv.toFixed(2)}</div>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="py-3">
+            <div class="grid grid-cols-12 text-[10px] uppercase tracking-widest text-muted mb-2">
+              <div class="col-span-2">SKU</div>
+              <div class="col-span-5">Producto</div>
+              <div class="col-span-1 text-right">Stock</div>
+              <div class="col-span-2 text-right">Precio USD</div>
+              <div class="col-span-2 text-right">Equiv. BS</div>
+            </div>
+            ${t.inventario.length === 0 ? `<div class="text-center text-muted py-6 text-sm">Sin productos</div>` :
+              t.inventario.map(p => {
+                const precioUSD = p.moneda === 'USD' ? p.precioUSD : bsToUsd(p.precioBS);
+                return `
+                  <div class="grid grid-cols-12 text-sm py-1.5 border-b border-line/40">
+                    <div class="col-span-2 text-muted font-mono text-xs">${p.sku || '—'}</div>
+                    <div class="col-span-5 truncate">${p.nombre}</div>
+                    <div class="col-span-1 text-right">${p.stock}</div>
+                    <div class="col-span-2 text-right font-semibold">${fmtUSD(precioUSD)}</div>
+                    <div class="col-span-2 text-right text-neon">${fmtBS(usdToBs(precioUSD))}</div>
+                  </div>
+                `;
+              }).join('')}
+          </div>
+          <div class="divider"></div>
+          <div class="text-center text-[11px] text-muted py-3">${t.inventario.length} producto(s) · Documento generado por Nexo Core V3</div>
+          <div class="flex gap-2 no-print">
+            <button class="btn btn-ghost flex-1 text-sm" onclick="closeModal()">Cerrar</button>
+            <button class="btn btn-primary flex-1 text-sm" onclick="window.print()">Imprimir / PDF</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  $('#modal-backdrop').addEventListener('click', e => {
+    if (e.target.id === 'modal-backdrop') closeModal();
+  });
+}
+
+function exportReporteFinancieroPDF() {
+  const t = tenant();
+  const totalGastosUSD = t.gastos.reduce((a,g) => a + (g.moneda === 'USD' ? g.monto : bsToUsd(g.monto)), 0);
+  const valorInvUSD = t.inventario.reduce((acc, p) => {
+    const costo = p.moneda === 'USD' ? (p.costoUSD || 0) : bsToUsd(p.costoBS || 0);
+    return acc + costo * p.stock;
+  }, 0);
+  const ventasReales = (t.ventas || []).reduce((a,v) => a + v.totalUSD, 0);
+
+  const root = $('#modal-root');
+  root.innerHTML = `
+    <div class="modal-backdrop" id="modal-backdrop">
+      <div class="glass-strong modal-card neon-border" id="print-area" style="max-width:560px;">
+        <div class="p-6">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="text-[10px] uppercase tracking-[0.25em] text-muted">Reporte financiero</div>
+              <div class="text-xl font-bold mt-0.5">${t.name}</div>
+              <div class="text-xs text-muted">Nexo Core V3 · ${new Date().toLocaleDateString('es-VE')}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-[10px] uppercase tracking-[0.2em] text-muted">Tasa BCV</div>
+              <div class="font-mono text-sm neon-text">Bs ${STATE.bcv.toFixed(2)}</div>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="grid grid-cols-2 gap-4 py-4 text-sm">
+            <div><div class="text-muted text-xs">Ventas registradas (POS)</div><div class="text-lg font-bold">${fmtUSD(ventasReales)}</div></div>
+            <div><div class="text-muted text-xs">Ventas mes (estimado)</div><div class="text-lg font-bold">${fmtUSD(t.kpis.ventasUSD)}</div></div>
+            <div><div class="text-muted text-xs">Egresos totales</div><div class="text-lg font-bold">${fmtUSD(totalGastosUSD)}</div></div>
+            <div><div class="text-muted text-xs">Valor inventario (costo)</div><div class="text-lg font-bold">${fmtUSD(valorInvUSD)}</div></div>
+            <div class="col-span-2"><div class="text-muted text-xs">Utilidad estimada</div><div class="text-2xl font-bold neon-text">${fmtUSD(t.kpis.ventasUSD - totalGastosUSD)}</div></div>
+          </div>
+          <div class="divider"></div>
+          <div class="text-center text-[11px] text-muted py-3">Documento generado por Nexo Core V3</div>
+          <div class="flex gap-2 no-print">
+            <button class="btn btn-ghost flex-1 text-sm" onclick="closeModal()">Cerrar</button>
+            <button class="btn btn-primary flex-1 text-sm" onclick="window.print()">Imprimir / PDF</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  $('#modal-backdrop').addEventListener('click', e => {
+    if (e.target.id === 'modal-backdrop') closeModal();
+  });
+}
+
+function deleteProduct(idx) {
+  const inv = tenant().inventario;
+  if (idx < 0 || idx >= inv.length) return;
+  const removed = inv.splice(idx, 1)[0];
+  // Quitar también del catálogo del POS si coincide por nombre
+  tenant().productos = tenant().productos.filter(p => p.nombre !== removed.nombre);
+  saveToStorage();
+  toast('Producto eliminado');
+  render();
+}
+
+function deleteGasto(idx) {
+  const g = tenant().gastos;
+  if (idx < 0 || idx >= g.length) return;
+  g.splice(idx, 1);
+  saveToStorage();
+  toast('Gasto eliminado');
+  render();
+}
+
+function clearVentas() {
+  if (!confirm('¿Borrar todo el histórico de ventas de este comercio?')) return;
+  tenant().ventas = [];
+  saveToStorage();
+  toast('Histórico de ventas limpiado');
+  render();
+}
+
+function reprintVenta(id) {
+  const v = (tenant().ventas || []).find(x => x.id === id);
+  if (v) openReceiptModal(v);
+}
+
+/* =========================================================
+   Componentes auxiliares (HTML strings)
+   ========================================================= */
+function kpiCard(label, valueMain, valueSub, trend, trendVal) {
+  const trendColor = trend === 'up' ? 'text-emerald-400' : trend === 'down' ? 'text-rose-400' : 'text-muted';
+  const arrow = trend === 'up' ? '▲' : trend === 'down' ? '▼' : '·';
+  return `
+    <div class="glass p-5">
+      <div class="flex items-center justify-between">
+        <div class="text-[11px] uppercase tracking-widest text-muted">${label}</div>
+        <span class="text-xs ${trendColor}">${arrow} ${trendVal}</span>
+      </div>
+      <div class="mt-2 text-2xl font-bold">${valueMain}</div>
+      <div class="text-xs text-muted mt-1">${valueSub}</div>
+    </div>
+  `;
+}
+
+function reportCard(label, value, sub, color) {
+  return `
+    <div class="glass p-5">
+      <div class="text-[11px] uppercase tracking-widest text-muted">${label}</div>
+      <div class="text-2xl font-bold mt-1" style="color:${color}; text-shadow: 0 0 12px ${color}55;">${value}</div>
+      <div class="text-xs text-muted mt-1">${sub}</div>
+    </div>
+  `;
+}
+
+function barChart(data) {
+  const max = Math.max(...data);
+  const labels = ['E','F','M','A','M','J','J','A','S','O','N','D'];
+  return `
+    <div class="flex items-end gap-2 h-44">
+      ${data.map((v,i) => {
+        const h = (v / max) * 100;
+        return `
+          <div class="flex-1 flex flex-col items-center gap-1">
+            <div class="w-full rounded-t-md" style="height:${h}%; background: linear-gradient(180deg, #00f2ff, rgba(0,242,255,0.15)); box-shadow: 0 0 10px rgba(0,242,255,0.25);"></div>
+            <span class="text-[10px] text-muted">${labels[i]}</span>
+          </div>
+        `;
+      }).join('')}
+    </div>
+  `;
+}
+
+/* =========================================================
+   Eventos globales
+   ========================================================= */
+function setView(v) {
+  // Bloqueo: no-admins no pueden navegar a vistas restringidas
+  if (!isAdmin() && (v === 'configuracion' || v === 'usuarios')) {
+    toast('No tenés permisos para acceder a esa sección');
+    return;
+  }
+  STATE.view = v;
+  render();
+}
+
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-nav]');
+  if (btn) setView(btn.dataset.nav);
+});
+
+document.addEventListener('change', e => {
+  if (e.target && e.target.id === 'tenant-switcher') {
+    if (!isAdmin()) { e.target.value = STATE.currentTenant; return; }
+    STATE.currentTenant = e.target.value;
+    STATE.cart = [];
+    saveToStorage();
+    toast(`Cambiado a: ${tenant().name}`);
+    render();
+  }
+});
+
+/* =========================================================
+   Autenticación (sessionStorage)
+   ========================================================= */
+const SESSION_KEY = 'nexo_core_v3_session';
+
+const USERS = {
+  'admin':      { pass: 'nexo2026',   role: 'admin',  name: 'Super Admin',          tenantKey: null },
+  'ferreteria': { pass: 'cliente123', role: 'client', name: 'Ferretería El Centro', tenantKey: 'ferreteria' }
+};
+
+function isAdmin() { return STATE.session && STATE.session.role === 'admin'; }
+
+function applySessionToUI() {
+  const s = STATE.session;
+  if (!s) return;
+
+  // Bloquear/forzar tenant para clientes
+  if (s.role === 'client' && s.tenantKey) {
+    STATE.currentTenant = s.tenantKey;
+  }
+
+  // Mostrar / ocultar elementos según rol
+  const hideForClient = s.role !== 'admin';
+  document.querySelectorAll('[data-role="admin"]').forEach(el => {
+    el.classList.toggle('hidden', hideForClient);
+  });
+
+  // Si el cliente está parado en una vista restringida, mandarlo al dashboard
+  if (hideForClient && (STATE.view === 'configuracion' || STATE.view === 'usuarios')) {
+    STATE.view = 'dashboard';
+  }
+
+  // Avatar + datos
+  const avatar = document.getElementById('user-avatar');
+  const uname = document.getElementById('user-name');
+  const urole = document.getElementById('user-role');
+  if (avatar) avatar.textContent = (s.name || s.user).slice(0,2).toUpperCase();
+  if (uname) uname.textContent = s.name || s.user;
+  if (urole) urole.textContent = s.role === 'admin' ? 'Super Admin' : 'Cliente';
+}
+
+function showLogin() {
+  const ov = document.getElementById('login-overlay');
+  const app = document.getElementById('app-shell');
+  ov.classList.remove('hidden');
+  ov.classList.add('flex');
+  app.classList.add('hidden');
+  const errEl = document.getElementById('login-error');
+  if (errEl) errEl.classList.add('hidden');
+  const form = document.getElementById('form-login');
+  if (form) form.reset();
+  setTimeout(() => { const u = form && form.querySelector('[name="user"]'); if (u) u.focus(); }, 50);
+}
+
+function hideLogin() {
+  const ov = document.getElementById('login-overlay');
+  const app = document.getElementById('app-shell');
+  ov.classList.add('hidden');
+  ov.classList.remove('flex');
+  app.classList.remove('hidden');
+}
+
+function loginAttempt(user, pass) {
+  const u = USERS[user.trim().toLowerCase()];
+  if (!u || u.pass !== pass) return false;
+  STATE.session = {
+    user: user.trim().toLowerCase(),
+    role: u.role,
+    name: u.name,
+    tenantKey: u.tenantKey,
+    loggedAt: Date.now()
+  };
+  sessionStorage.setItem(SESSION_KEY, JSON.stringify(STATE.session));
+  return true;
+}
+
+function restoreSession() {
+  try {
+    const raw = sessionStorage.getItem(SESSION_KEY);
+    if (!raw) return false;
+    STATE.session = JSON.parse(raw);
+    return !!STATE.session;
+  } catch { return false; }
+}
+
+function logout() {
+  STATE.session = null;
+  sessionStorage.removeItem(SESSION_KEY);
+  STATE.view = 'dashboard';
+  STATE.cart = [];
+  showLogin();
+  toast('Sesión cerrada');
+}
+
+function prefillLogin(user, pass) {
+  const f = document.getElementById('form-login');
+  if (!f) return;
+  f.querySelector('[name="user"]').value = user;
+  f.querySelector('[name="pass"]').value = pass;
+  f.querySelector('[name="pass"]').focus();
+}
+
+document.getElementById('form-login').addEventListener('submit', e => {
+  e.preventDefault();
+  const fd = new FormData(e.target);
+  const user = (fd.get('user') || '').toString();
+  const pass = (fd.get('pass') || '').toString();
+  const errEl = document.getElementById('login-error');
+  if (loginAttempt(user, pass)) {
+    errEl.classList.add('hidden');
+    hideLogin();
+    applySessionToUI();
+    render();
+    toast(`Bienvenido, ${STATE.session.name}`);
+  } else {
+    errEl.textContent = 'Usuario o clave incorrectos. Verificá tus credenciales.';
+    errEl.classList.remove('hidden');
+    const passEl = e.target.querySelector('[name="pass"]');
+    if (passEl) { passEl.value = ''; passEl.focus(); }
+  }
+});
+
+/* =========================================================
+   Boot
+   ========================================================= */
+loadFromStorage();
+
+if (restoreSession()) {
+  hideLogin();
+  applySessionToUI();
+  render();
+} else {
+  showLogin();
+}
+</script>
+</body>
+</html>
