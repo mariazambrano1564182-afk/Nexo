@@ -91,6 +91,55 @@
   .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 22px rgba(0,242,255,0.65); }
   .btn-ghost { background: rgba(255,255,255,0.04); color: #f8fafc; border: 1px solid rgba(148,163,184,0.18); }
   .btn-ghost:hover { background: rgba(255,255,255,0.08); }
+  .btn-danger {
+    background: rgba(244,63,94,0.10);
+    color: #fb7185;
+    border: 1px solid rgba(244,63,94,0.35);
+    box-shadow: 0 0 0 0 rgba(244,63,94,0);
+    transition: background .15s, box-shadow .15s, color .15s, transform .08s;
+  }
+  .btn-danger:hover {
+    background: rgba(244,63,94,0.18);
+    color: #fecaca;
+    box-shadow: 0 0 14px rgba(244,63,94,0.45);
+    transform: translateY(-1px);
+  }
+  .text-danger { color: #fb7185; text-shadow: 0 0 10px rgba(244,63,94,0.35); }
+  /* Modal */
+  .modal-backdrop {
+    position: fixed; inset: 0; z-index: 50;
+    background: rgba(2,6,23,0.72);
+    backdrop-filter: blur(8px);
+    -webkit-backdrop-filter: blur(8px);
+    display: flex; align-items: center; justify-content: center;
+    padding: 1rem;
+    animation: fade .2s ease-out;
+  }
+  .modal-card {
+    width: 100%; max-width: 460px;
+    max-height: 90vh; overflow: auto;
+  }
+  /* Print scope */
+  @media print {
+    body * { visibility: hidden !important; }
+    #print-area, #print-area * { visibility: visible !important; }
+    #print-area {
+      position: absolute; inset: 0;
+      background: #ffffff !important;
+      color: #020617 !important;
+      padding: 28px !important;
+      box-shadow: none !important;
+      border: none !important;
+      backdrop-filter: none !important;
+      max-height: none !important;
+      overflow: visible !important;
+    }
+    #print-area .neon-text, #print-area .text-neon { color: #020617 !important; text-shadow: none !important; }
+    #print-area .text-muted { color: #475569 !important; }
+    #print-area .badge-neon { color: #020617 !important; background: #f1f5f9 !important; border-color: #cbd5e1 !important; }
+    #print-area .divider { background: #cbd5e1 !important; }
+    #print-area .no-print { display: none !important; }
+  }
   table { width: 100%; border-collapse: collapse; }
   th { text-align: left; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #94a3b8; font-weight: 600; padding: 12px 14px; border-bottom: 1px solid rgba(148,163,184,0.15); }
   td { padding: 14px; border-bottom: 1px solid rgba(148,163,184,0.08); font-size: 14px; }
@@ -232,6 +281,9 @@
 <!-- TOAST -->
 <div id="toast" class="fixed bottom-6 right-6 hidden glass-strong px-4 py-3 text-sm text-ink shadow-glow"></div>
 
+<!-- MODAL ROOT -->
+<div id="modal-root"></div>
+
 <script>
 /* =========================================================
    NEXO CORE V3 — Estado Global Multi-Tenant
@@ -269,6 +321,7 @@ const STATE = {
         { nombre: 'Caja Tornillos x100', precio: 6.5 },
         { nombre: 'Cinta Aislante', precio: 2.5 },
       ],
+      ventas: [],
     },
     farmacia: {
       name: 'Farmacia Global',
@@ -299,6 +352,7 @@ const STATE = {
         { nombre: 'Mascarilla x50', precio: 5.5 },
         { nombre: 'Alcohol 1L', precio: 4.9 },
       ],
+      ventas: [],
     }
   },
   usuarios: [
@@ -328,6 +382,7 @@ function loadFromStorage() {
         if (STATE.tenants[k]) {
           if (Array.isArray(t.inventario)) STATE.tenants[k].inventario = t.inventario;
           if (Array.isArray(t.gastos))     STATE.tenants[k].gastos = t.gastos;
+          if (Array.isArray(t.ventas))     STATE.tenants[k].ventas = t.ventas;
         }
       });
     }
@@ -343,6 +398,7 @@ function saveToStorage() {
       Object.entries(STATE.tenants).map(([k, t]) => [k, {
         inventario: t.inventario,
         gastos: t.gastos,
+        ventas: t.ventas,
       }])
     ),
   };
@@ -530,7 +586,8 @@ const VIEWS = {
           <h2 class="text-xl font-semibold">${t.name}</h2>
         </div>
         <div class="flex gap-2">
-          <button class="btn btn-ghost text-sm">Importar</button>
+          <button class="btn btn-ghost text-sm" onclick="exportInventarioCSV()">Exportar Excel</button>
+          <button class="btn btn-ghost text-sm" onclick="exportInventarioPDF()">Exportar PDF</button>
           <button class="btn btn-primary text-sm" id="btn-add-prod">+ Nuevo producto</button>
         </div>
       </div>
@@ -560,7 +617,7 @@ const VIEWS = {
                     <td class="font-semibold">${fmtUSD(precioUSD)}</td>
                     <td class="text-neon">${fmtBS(usdToBs(precioUSD))}</td>
                     <td class="text-right">
-                      <button class="btn btn-ghost text-xs" onclick="deleteProduct(${idx})">Eliminar</button>
+                      <button class="btn btn-danger text-xs" onclick="deleteProduct(${idx})">Eliminar</button>
                     </td>
                   </tr>
                 `;
@@ -667,7 +724,7 @@ const VIEWS = {
                   <td class="font-semibold">${g.moneda === 'USD' ? fmtUSD(g.monto) : fmtBS(g.monto)}</td>
                   <td class="text-muted">${g.moneda}</td>
                   <td>${g.moneda === 'USD' ? fmtUSD(g.monto) : fmtUSD(bsToUsd(g.monto))}</td>
-                  <td class="text-right"><button class="btn btn-ghost text-xs" onclick="deleteGasto(${idx})">Eliminar</button></td>
+                  <td class="text-right"><button class="btn btn-danger text-xs" onclick="deleteGasto(${idx})">Eliminar</button></td>
                 </tr>
               `).join('')}
             </tbody>
@@ -703,27 +760,41 @@ const VIEWS = {
   reportes() {
     const t = tenant();
     const valorInvUSD = t.inventario.reduce((acc, p) => {
-      const costo = p.moneda === 'USD' ? p.costoUSD : bsToUsd(p.costoBS);
+      const costo = p.moneda === 'USD' ? (p.costoUSD || 0) : bsToUsd(p.costoBS || 0);
       return acc + costo * p.stock;
     }, 0);
     const totalGastosUSD = t.gastos.reduce((a,g) => a + (g.moneda === 'USD' ? g.monto : bsToUsd(g.monto)), 0);
+    const ventas = t.ventas || [];
+    const ventasUSD = ventas.reduce((a,v) => a + v.totalUSD, 0);
 
     const wrap = document.createElement('div');
     wrap.innerHTML = `
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
-        ${reportCard('Ventas', fmtUSD(t.kpis.ventasUSD), 'Mes en curso', '#00f2ff')}
-        ${reportCard('Egresos', fmtUSD(totalGastosUSD), 'Mes en curso', '#f43f5e')}
-        ${reportCard('Valor inventario', fmtUSD(valorInvUSD), 'A costo', '#22d3ee')}
+      <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-2">
+        <div>
+          <div class="text-[11px] uppercase tracking-widest text-muted">Reportes</div>
+          <h2 class="text-xl font-semibold">${t.name}</h2>
+        </div>
+        <div class="flex gap-2 flex-wrap">
+          <button class="btn btn-ghost text-sm" onclick="exportVentasCSV()">Exportar Excel</button>
+          <button class="btn btn-ghost text-sm" onclick="exportReporteFinancieroPDF()">Exportar PDF</button>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
+        ${reportCard('Ventas mes (estim.)', fmtUSD(t.kpis.ventasUSD), '12 meses', '#00f2ff')}
+        ${reportCard('Ventas POS reales', fmtUSD(ventasUSD), `${ventas.length} recibo(s)`, '#22d3ee')}
+        ${reportCard('Egresos', fmtUSD(totalGastosUSD), 'Mes en curso', '#fb7185')}
+        ${reportCard('Valor inventario', fmtUSD(valorInvUSD), 'A costo', '#a78bfa')}
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
         <div class="glass p-5">
           <div class="flex items-center justify-between mb-4">
             <div>
-              <div class="text-[11px] uppercase tracking-widest text-muted">Reporte de ventas</div>
+              <div class="text-[11px] uppercase tracking-widest text-muted">Tendencia de ventas</div>
               <div class="text-lg font-semibold">12 meses</div>
             </div>
-            <button class="btn btn-ghost text-xs" onclick="toast('Reporte exportado (simulado)')">Exportar PDF</button>
+            <button class="btn btn-ghost text-xs" onclick="exportReporteFinancieroPDF()">PDF</button>
           </div>
           ${barChart(t.ventasMes)}
         </div>
@@ -734,24 +805,28 @@ const VIEWS = {
               <div class="text-[11px] uppercase tracking-widest text-muted">Reporte de inventario</div>
               <div class="text-lg font-semibold">Stock actual</div>
             </div>
-            <button class="btn btn-ghost text-xs" onclick="toast('Reporte exportado (simulado)')">Exportar XLS</button>
+            <div class="flex gap-2">
+              <button class="btn btn-ghost text-xs" onclick="exportInventarioCSV()">Excel</button>
+              <button class="btn btn-ghost text-xs" onclick="exportInventarioPDF()">PDF</button>
+            </div>
           </div>
           <div class="space-y-2">
-            ${t.inventario.slice(0,6).map(p => {
-              const max = Math.max(...t.inventario.map(x => x.stock));
-              const w = Math.max(6, (p.stock / max) * 100);
-              return `
-                <div>
-                  <div class="flex justify-between text-xs mb-1">
-                    <span class="text-muted">${p.nombre}</span>
-                    <span>${p.stock} u.</span>
+            ${t.inventario.length === 0 ? `<div class="text-muted text-sm text-center py-4">Sin productos</div>` :
+              t.inventario.slice(0,6).map(p => {
+                const max = Math.max(...t.inventario.map(x => x.stock), 1);
+                const w = Math.max(6, (p.stock / max) * 100);
+                return `
+                  <div>
+                    <div class="flex justify-between text-xs mb-1">
+                      <span class="text-muted">${p.nombre}</span>
+                      <span>${p.stock} u.</span>
+                    </div>
+                    <div class="h-2 rounded-full bg-white/5 overflow-hidden">
+                      <div class="h-full" style="width:${w}%; background: linear-gradient(90deg, #00f2ff, rgba(0,242,255,.3));"></div>
+                    </div>
                   </div>
-                  <div class="h-2 rounded-full bg-white/5 overflow-hidden">
-                    <div class="h-full" style="width:${w}%; background: linear-gradient(90deg, #00f2ff, rgba(0,242,255,.3));"></div>
-                  </div>
-                </div>
-              `;
-            }).join('')}
+                `;
+              }).join('')}
           </div>
         </div>
       </div>
@@ -759,10 +834,48 @@ const VIEWS = {
       <div class="glass mt-4 p-5">
         <div class="text-sm font-semibold mb-3">Estado de resultados (simplificado)</div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div><div class="text-muted text-xs">Ingresos</div><div class="text-lg font-bold">${fmtUSD(t.kpis.ventasUSD)}</div></div>
+          <div><div class="text-muted text-xs">Ingresos (estim.)</div><div class="text-lg font-bold">${fmtUSD(t.kpis.ventasUSD)}</div></div>
           <div><div class="text-muted text-xs">Egresos</div><div class="text-lg font-bold">${fmtUSD(totalGastosUSD)}</div></div>
           <div><div class="text-muted text-xs">Utilidad</div><div class="text-lg font-bold neon-text">${fmtUSD(t.kpis.ventasUSD - totalGastosUSD)}</div></div>
           <div><div class="text-muted text-xs">Margen</div><div class="text-lg font-bold">${(((t.kpis.ventasUSD - totalGastosUSD) / t.kpis.ventasUSD) * 100).toFixed(1)}%</div></div>
+        </div>
+      </div>
+
+      <div class="glass mt-4 overflow-hidden">
+        <div class="flex items-center justify-between p-5 pb-3">
+          <div>
+            <div class="text-[11px] uppercase tracking-widest text-muted">Histórico de ventas</div>
+            <div class="text-lg font-semibold">${ventas.length} recibo(s) · ${fmtUSD(ventasUSD)}</div>
+          </div>
+          <div class="flex gap-2">
+            <button class="btn btn-ghost text-xs" onclick="exportVentasCSV()">Exportar Excel</button>
+            ${ventas.length ? `<button class="btn btn-danger text-xs" onclick="clearVentas()">Limpiar histórico</button>` : ''}
+          </div>
+        </div>
+        <div class="table-scroll scroll-thin">
+          <table>
+            <thead>
+              <tr><th>Recibo</th><th>Fecha</th><th>Productos</th><th>Total USD</th><th>Total BS</th><th>BCV</th><th></th></tr>
+            </thead>
+            <tbody>
+              ${ventas.length === 0 ? `
+                <tr><td colspan="7" class="text-center text-muted py-10">Aún no hay ventas registradas. Hacé tu primera venta desde el POS.</td></tr>
+              ` : ventas.map(v => {
+                const items = v.items.map(i => `${i.qty}× ${i.nombre}`).join(', ');
+                return `
+                  <tr>
+                    <td class="font-mono text-xs neon-text">${v.id}</td>
+                    <td class="text-muted">${new Date(v.fecha).toLocaleString('es-VE')}</td>
+                    <td class="max-w-xs truncate" title="${items}">${items}</td>
+                    <td class="font-semibold">${fmtUSD(v.totalUSD)}</td>
+                    <td>${fmtBS(v.totalBS)}</td>
+                    <td class="text-muted text-xs">Bs ${v.bcv.toFixed(2)}</td>
+                    <td class="text-right"><button class="btn btn-ghost text-xs" onclick='reprintVenta("${v.id}")'>Ver</button></td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
         </div>
       </div>
     `;
@@ -891,7 +1004,7 @@ const VIEWS = {
           <div class="text-sm font-semibold">Almacenamiento local</div>
           <div class="text-xs text-muted">Tasa BCV, inventario y gastos se guardan en este navegador. Al refrescar, los datos se conservan.</div>
         </div>
-        <button id="btn-reset" class="btn btn-ghost text-sm">Restaurar datos iniciales</button>
+        <button id="btn-reset" class="btn btn-danger text-sm">Restaurar datos iniciales</button>
       </div>
     `;
 
@@ -983,10 +1096,240 @@ function checkout() {
     const p = inv.find(x => x.nombre === c.nombre);
     if (p && typeof p.stock === 'number') p.stock = Math.max(0, p.stock - c.qty);
   });
+  // Persistir venta en histórico
+  const venta = {
+    id: 'V-' + Date.now().toString(36).toUpperCase(),
+    fecha: new Date().toISOString(),
+    tenantKey: STATE.currentTenant,
+    tenantName: tenant().name,
+    items: STATE.cart.map(c => ({ nombre: c.nombre, qty: c.qty, precio: c.precio })),
+    totalUSD,
+    bcv: STATE.bcv,
+    totalBS: usdToBs(totalUSD),
+  };
+  tenant().ventas = tenant().ventas || [];
+  tenant().ventas.unshift(venta);
   saveToStorage();
-  toast(`Venta procesada: ${fmtUSD(totalUSD)} · ${fmtBS(usdToBs(totalUSD))}`);
   STATE.cart = [];
   renderPOS();
+  openReceiptModal(venta);
+}
+
+/* =========================================================
+   Modal de Recibo
+   ========================================================= */
+function openReceiptModal(venta) {
+  const root = $('#modal-root');
+  const fecha = new Date(venta.fecha);
+  const fechaStr = fecha.toLocaleDateString('es-VE') + ' · ' + fecha.toLocaleTimeString('es-VE', {hour:'2-digit', minute:'2-digit'});
+  root.innerHTML = `
+    <div class="modal-backdrop" id="modal-backdrop">
+      <div class="glass-strong modal-card neon-border" id="print-area">
+        <div class="p-6">
+          <div class="flex items-start justify-between mb-4">
+            <div>
+              <div class="text-[10px] uppercase tracking-[0.25em] text-muted">Recibo de venta</div>
+              <div class="text-xl font-bold mt-0.5">${venta.tenantName}</div>
+              <div class="text-xs text-muted">Nexo Core V3 · ${fechaStr}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-[10px] uppercase tracking-[0.2em] text-muted">N°</div>
+              <div class="font-mono text-sm neon-text">${venta.id}</div>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="py-3">
+            <div class="grid grid-cols-12 text-[10px] uppercase tracking-widest text-muted mb-2">
+              <div class="col-span-6">Producto</div>
+              <div class="col-span-2 text-center">Cant.</div>
+              <div class="col-span-2 text-right">P.U.</div>
+              <div class="col-span-2 text-right">Subt.</div>
+            </div>
+            ${venta.items.map(it => `
+              <div class="grid grid-cols-12 text-sm py-1.5">
+                <div class="col-span-6 truncate">${it.nombre}</div>
+                <div class="col-span-2 text-center">${it.qty}</div>
+                <div class="col-span-2 text-right">${fmtUSD(it.precio)}</div>
+                <div class="col-span-2 text-right font-semibold">${fmtUSD(it.precio * it.qty)}</div>
+              </div>
+            `).join('')}
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="py-3 space-y-1.5 text-sm">
+            <div class="flex justify-between text-muted"><span>Tasa BCV aplicada</span><span>Bs ${venta.bcv.toFixed(2)} / USD</span></div>
+            <div class="flex justify-between"><span class="text-muted">Total USD</span><span class="font-semibold">${fmtUSD(venta.totalUSD)}</span></div>
+            <div class="flex justify-between items-end pt-1">
+              <span class="text-muted">Total BS</span>
+              <span class="text-2xl font-bold neon-text">${fmtBS(venta.totalBS)}</span>
+            </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="text-center text-[11px] text-muted py-3">
+            Gracias por su compra · Documento simulado · No fiscal
+          </div>
+
+          <div class="flex gap-2 no-print">
+            <button class="btn btn-ghost flex-1 text-sm" onclick="closeModal()">Cerrar</button>
+            <button class="btn btn-primary flex-1 text-sm" onclick="window.print()">Imprimir</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  $('#modal-backdrop').addEventListener('click', e => {
+    if (e.target.id === 'modal-backdrop') closeModal();
+  });
+}
+
+function closeModal() {
+  $('#modal-root').innerHTML = '';
+}
+
+/* =========================================================
+   Exportación (CSV / PDF vía impresión)
+   ========================================================= */
+function downloadCSV(filename, rows) {
+  const csv = rows.map(r => r.map(cell => {
+    const s = String(cell ?? '');
+    return /[",\n;]/.test(s) ? `"${s.replace(/"/g,'""')}"` : s;
+  }).join(',')).join('\n');
+  const blob = new Blob(['\ufeff' + csv], { type: 'text/csv;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = filename; a.click();
+  URL.revokeObjectURL(url);
+}
+
+function exportInventarioCSV() {
+  const t = tenant();
+  const rows = [['SKU','Producto','Stock','Precio USD','Equivalente BS','Tasa BCV']];
+  t.inventario.forEach(p => {
+    const precioUSD = p.moneda === 'USD' ? p.precioUSD : bsToUsd(p.precioBS);
+    rows.push([p.sku || '', p.nombre, p.stock, precioUSD.toFixed(2), usdToBs(precioUSD).toFixed(2), STATE.bcv.toFixed(2)]);
+  });
+  downloadCSV(`inventario-${STATE.currentTenant}-${Date.now()}.csv`, rows);
+  toast('Inventario exportado a CSV');
+}
+
+function exportVentasCSV() {
+  const t = tenant();
+  const rows = [['Recibo','Fecha','Productos','Total USD','Total BS','Tasa BCV']];
+  (t.ventas || []).forEach(v => {
+    const items = v.items.map(i => `${i.qty}x ${i.nombre}`).join(' | ');
+    rows.push([v.id, new Date(v.fecha).toLocaleString('es-VE'), items, v.totalUSD.toFixed(2), v.totalBS.toFixed(2), v.bcv.toFixed(2)]);
+  });
+  downloadCSV(`ventas-${STATE.currentTenant}-${Date.now()}.csv`, rows);
+  toast('Reporte de ventas exportado a CSV');
+}
+
+function exportInventarioPDF() {
+  const t = tenant();
+  const root = $('#modal-root');
+  root.innerHTML = `
+    <div class="modal-backdrop" id="modal-backdrop">
+      <div class="glass-strong modal-card neon-border" id="print-area" style="max-width:720px;">
+        <div class="p-6">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="text-[10px] uppercase tracking-[0.25em] text-muted">Reporte de Inventario</div>
+              <div class="text-xl font-bold mt-0.5">${t.name}</div>
+              <div class="text-xs text-muted">Nexo Core V3 · ${new Date().toLocaleDateString('es-VE')}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-[10px] uppercase tracking-[0.2em] text-muted">Tasa BCV</div>
+              <div class="font-mono text-sm neon-text">Bs ${STATE.bcv.toFixed(2)}</div>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="py-3">
+            <div class="grid grid-cols-12 text-[10px] uppercase tracking-widest text-muted mb-2">
+              <div class="col-span-2">SKU</div>
+              <div class="col-span-5">Producto</div>
+              <div class="col-span-1 text-right">Stock</div>
+              <div class="col-span-2 text-right">Precio USD</div>
+              <div class="col-span-2 text-right">Equiv. BS</div>
+            </div>
+            ${t.inventario.length === 0 ? `<div class="text-center text-muted py-6 text-sm">Sin productos</div>` :
+              t.inventario.map(p => {
+                const precioUSD = p.moneda === 'USD' ? p.precioUSD : bsToUsd(p.precioBS);
+                return `
+                  <div class="grid grid-cols-12 text-sm py-1.5 border-b border-line/40">
+                    <div class="col-span-2 text-muted font-mono text-xs">${p.sku || '—'}</div>
+                    <div class="col-span-5 truncate">${p.nombre}</div>
+                    <div class="col-span-1 text-right">${p.stock}</div>
+                    <div class="col-span-2 text-right font-semibold">${fmtUSD(precioUSD)}</div>
+                    <div class="col-span-2 text-right text-neon">${fmtBS(usdToBs(precioUSD))}</div>
+                  </div>
+                `;
+              }).join('')}
+          </div>
+          <div class="divider"></div>
+          <div class="text-center text-[11px] text-muted py-3">${t.inventario.length} producto(s) · Documento generado por Nexo Core V3</div>
+          <div class="flex gap-2 no-print">
+            <button class="btn btn-ghost flex-1 text-sm" onclick="closeModal()">Cerrar</button>
+            <button class="btn btn-primary flex-1 text-sm" onclick="window.print()">Imprimir / PDF</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  $('#modal-backdrop').addEventListener('click', e => {
+    if (e.target.id === 'modal-backdrop') closeModal();
+  });
+}
+
+function exportReporteFinancieroPDF() {
+  const t = tenant();
+  const totalGastosUSD = t.gastos.reduce((a,g) => a + (g.moneda === 'USD' ? g.monto : bsToUsd(g.monto)), 0);
+  const valorInvUSD = t.inventario.reduce((acc, p) => {
+    const costo = p.moneda === 'USD' ? (p.costoUSD || 0) : bsToUsd(p.costoBS || 0);
+    return acc + costo * p.stock;
+  }, 0);
+  const ventasReales = (t.ventas || []).reduce((a,v) => a + v.totalUSD, 0);
+
+  const root = $('#modal-root');
+  root.innerHTML = `
+    <div class="modal-backdrop" id="modal-backdrop">
+      <div class="glass-strong modal-card neon-border" id="print-area" style="max-width:560px;">
+        <div class="p-6">
+          <div class="flex items-start justify-between mb-3">
+            <div>
+              <div class="text-[10px] uppercase tracking-[0.25em] text-muted">Reporte financiero</div>
+              <div class="text-xl font-bold mt-0.5">${t.name}</div>
+              <div class="text-xs text-muted">Nexo Core V3 · ${new Date().toLocaleDateString('es-VE')}</div>
+            </div>
+            <div class="text-right">
+              <div class="text-[10px] uppercase tracking-[0.2em] text-muted">Tasa BCV</div>
+              <div class="font-mono text-sm neon-text">Bs ${STATE.bcv.toFixed(2)}</div>
+            </div>
+          </div>
+          <div class="divider"></div>
+          <div class="grid grid-cols-2 gap-4 py-4 text-sm">
+            <div><div class="text-muted text-xs">Ventas registradas (POS)</div><div class="text-lg font-bold">${fmtUSD(ventasReales)}</div></div>
+            <div><div class="text-muted text-xs">Ventas mes (estimado)</div><div class="text-lg font-bold">${fmtUSD(t.kpis.ventasUSD)}</div></div>
+            <div><div class="text-muted text-xs">Egresos totales</div><div class="text-lg font-bold">${fmtUSD(totalGastosUSD)}</div></div>
+            <div><div class="text-muted text-xs">Valor inventario (costo)</div><div class="text-lg font-bold">${fmtUSD(valorInvUSD)}</div></div>
+            <div class="col-span-2"><div class="text-muted text-xs">Utilidad estimada</div><div class="text-2xl font-bold neon-text">${fmtUSD(t.kpis.ventasUSD - totalGastosUSD)}</div></div>
+          </div>
+          <div class="divider"></div>
+          <div class="text-center text-[11px] text-muted py-3">Documento generado por Nexo Core V3</div>
+          <div class="flex gap-2 no-print">
+            <button class="btn btn-ghost flex-1 text-sm" onclick="closeModal()">Cerrar</button>
+            <button class="btn btn-primary flex-1 text-sm" onclick="window.print()">Imprimir / PDF</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  $('#modal-backdrop').addEventListener('click', e => {
+    if (e.target.id === 'modal-backdrop') closeModal();
+  });
 }
 
 function deleteProduct(idx) {
@@ -1007,6 +1350,19 @@ function deleteGasto(idx) {
   saveToStorage();
   toast('Gasto eliminado');
   render();
+}
+
+function clearVentas() {
+  if (!confirm('¿Borrar todo el histórico de ventas de este comercio?')) return;
+  tenant().ventas = [];
+  saveToStorage();
+  toast('Histórico de ventas limpiado');
+  render();
+}
+
+function reprintVenta(id) {
+  const v = (tenant().ventas || []).find(x => x.id === id);
+  if (v) openReceiptModal(v);
 }
 
 /* =========================================================
