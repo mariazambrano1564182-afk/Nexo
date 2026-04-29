@@ -20,6 +20,14 @@ author = "agent"
 task = "workflow.run"
 args = "Nexo Core V3"
 
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "API Server"
+
+[[workflows.workflow.tasks]]
+task = "workflow.run"
+args = "Mockup Sandbox"
+
 [[workflows.workflow]]
 name = "Nexo Core V3"
 author = "agent"
@@ -32,8 +40,32 @@ waitForPort = 5000
 [workflows.workflow.metadata]
 outputType = "webview"
 
+[[workflows.workflow]]
+name = "API Server"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=3001 NODE_ENV=development pnpm --filter @workspace/api-server run dev"
+waitForPort = 3001
+
+[workflows.workflow.metadata]
+outputType = "console"
+
+[[workflows.workflow]]
+name = "Mockup Sandbox"
+author = "agent"
+
+[[workflows.workflow.tasks]]
+task = "shell.exec"
+args = "PORT=3002 BASE_PATH=/ NODE_ENV=development pnpm --filter @workspace/mockup-sandbox run dev"
+waitForPort = 3002
+
+[workflows.workflow.metadata]
+outputType = "console"
+
 [agent]
-stack = "PNPM_WORKSPACE"
+stack = "BEST_EFFORT_FALLBACK"
 expertMode = true
 
 [postMerge]
@@ -41,17 +73,13 @@ path = "scripts/post-merge.sh"
 timeoutMs = 20000
 
 [[ports]]
-localPort = 3000
-externalPort = 3000
+localPort = 3001
+externalPort = 3001
+
+[[ports]]
+localPort = 3002
+externalPort = 3002
 
 [[ports]]
 localPort = 5000
-externalPort = 5000
-
-[[ports]]
-localPort = 8080
-externalPort = 8080
-
-[[ports]]
-localPort = 8081
 externalPort = 80
