@@ -1,4 +1,1 @@
-{
-  "installCommand": "pnpm install --no-frozen-lockfile",
-  "framework": null
-}
+{ "installCommand": "pnpm install --no-frozen-lockfile" }
