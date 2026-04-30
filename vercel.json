@@ -1,4 +1,6 @@
 {
+  "version": 2,
+  "outputDirectory": "artifacts/api-server/dist",
   "installCommand": "pnpm install --no-frozen-lockfile",
   "buildCommand": "pnpm run build",
   "framework": null
