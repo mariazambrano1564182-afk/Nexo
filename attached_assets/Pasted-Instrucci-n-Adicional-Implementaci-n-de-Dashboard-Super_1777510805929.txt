@@ -1,0 +1,52 @@
+Instrucción Adicional: Implementación de Dashboard SuperAdmin y Lógica de Planes
+
+Como Senior Fullstack Architect, expande la funcionalidad del sistema para diferenciar entre la vista de un Tenant común y el SuperAdmin del SaaS.
+
+1. Panel de Control del SuperAdmin (Vista Maestra)
+Cuando el usuario con rol superadmin inicie sesión, el selector de tenant debe permitirle acceder a su propio "Dashboard de Infraestructura":
+
+Métricas del SaaS: Implementa tarjetas que muestren:
+
+Ganancias Mensuales: Suma total de los planes activos.
+
+Estado del Sistema: Indicador visual de salud de la API y conexión con Supabase.
+
+Notificaciones de Soporte: Alertas si un tenant reporta errores técnicos.
+
+Gestión de Vencimientos: Un listado de comercios cuya suscripción esté a menos de 5 días de vencer o ya haya expirado.
+
+2. Registro de Comercio con Selección de Plan
+En el formulario de Registro de Comercio (Lado Izquierdo), añade un selector (Dropdown o Radio Cards) para asignar un nivel de servicio:
+
+Plan Básico: (Ej. Solo Inventario y Ventas).
+
+Plan Avanzado: (Ej. Básico + Gastos + Reportes PDF).
+
+Plan Pro: (Ej. Acceso Total + API para WhatsApp Bot).
+
+Lógica de Registro: Al guardar el comercio, vincula el plan_id y establece una fecha_vencimiento automática (30 días a partir de la fecha actual).
+
+3. Refactorización del Selector de Tenant
+Modifica el componente de selección para que, si el usuario es superadmin, aparezca una opción fija llamada "ADMINISTRACIÓN GLOBAL" al inicio de la lista.
+
+Al seleccionar esta opción, el sistema debe redirigir a una ruta protegida /admin/dashboard con la interfaz de métricas de infraestructura.
+
+4. UI y Estética (Consistencia)
+Usa el esquema de color definido anteriormente: Fondo #020617 y bordes con efecto vidrio (opacidad 3-5%).
+
+Para el estado del sistema, usa un indicador de pulso (ping animation) con el color de acento #00f2ff.
+
+Cambios Sugeridos en la Base de Datos (Supabase)
+Para que el agente pueda ejecutar esto, asegúrate de indicarle que revise o cree estas columnas:
+
+Tabla tenants:
+
+plan_type: (enum: 'basic', 'advanced', 'pro').
+
+status: (enum: 'active', 'suspended', 'expired').
+
+expiration_date: (timestamp).
+
+Tabla users:
+
+role: (text: 'admin_tenant' o 'superadmin').

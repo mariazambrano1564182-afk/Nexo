@@ -180,8 +180,8 @@
 
     <div class="px-3 mt-2 mb-4">
       <div class="glass px-3 py-2 flex items-center gap-2">
-        <span class="pulse-dot"></span>
-        <span class="text-[11px] uppercase tracking-widest text-muted">Super Admin</span>
+        <span class="pulse-dot" id="sidebar-pulse"></span>
+        <span class="text-[11px] uppercase tracking-widest text-muted" id="sidebar-role-badge">—</span>
       </div>
     </div>
 
@@ -345,6 +345,9 @@ const STATE = {
       type: 'Ferretería',
       city: 'Caracas',
       manager: 'Luis Hernández',
+      plan_type: 'advanced',
+      status: 'active',
+      expiration_date: '2026-05-29',
       kpis: { ventasUSD: 18420, ticketProm: 42.10, productos: 248, clientes: 612 },
       inventario: [
         { sku: 'FE-001', nombre: 'Taladro Inalámbrico 18V', stock: 22, costoUSD: 65, precioUSD: 119, moneda: 'USD' },
@@ -376,6 +379,9 @@ const STATE = {
       type: 'Farmacia',
       city: 'Valencia',
       manager: 'María Rodríguez',
+      plan_type: 'pro',
+      status: 'active',
+      expiration_date: '2026-05-03',
       kpis: { ventasUSD: 27890, ticketProm: 18.40, productos: 612, clientes: 1840 },
       inventario: [
         { sku: 'FA-001', nombre: 'Acetaminofén 500mg x20', stock: 320, costoUSD: 1.2, precioUSD: 2.5, moneda: 'USD' },
@@ -404,14 +410,26 @@ const STATE = {
     }
   },
   usuarios: [
-    { nombre: 'Luis Hernández',  email: 'luis@nexo.io',   rol: 'Gerente',     comercio: 'ferreteria', estado: 'Activo' },
-    { nombre: 'Carla Pérez',     email: 'carla@nexo.io',  rol: 'Vendedor',    comercio: 'ferreteria', estado: 'Activo' },
-    { nombre: 'María Rodríguez', email: 'maria@nexo.io',  rol: 'Gerente',     comercio: 'farmacia',   estado: 'Activo' },
-    { nombre: 'Daniel Torres',   email: 'daniel@nexo.io', rol: 'Farmacéutico',comercio: 'farmacia',   estado: 'Activo' },
-    { nombre: 'Andrés Vega',     email: 'andres@nexo.io', rol: 'Super Admin', comercio: 'all',        estado: 'Activo' },
+    { nombre: 'Luis Hernández',  email: 'luis@nexo.io',   rol: 'Gerente',      role: 'admin_tenant', comercio: 'ferreteria', estado: 'Activo' },
+    { nombre: 'Carla Pérez',     email: 'carla@nexo.io',  rol: 'Vendedor',     role: 'admin_tenant', comercio: 'ferreteria', estado: 'Activo' },
+    { nombre: 'María Rodríguez', email: 'maria@nexo.io',  rol: 'Gerente',      role: 'admin_tenant', comercio: 'farmacia',   estado: 'Activo' },
+    { nombre: 'Daniel Torres',   email: 'daniel@nexo.io', rol: 'Farmacéutico', role: 'admin_tenant', comercio: 'farmacia',   estado: 'Activo' },
+    { nombre: 'Andrés Vega',     email: 'andres@nexo.io', rol: 'Super Admin',  role: 'superadmin',   comercio: 'all',        estado: 'Activo' },
+  ],
+  soporte: [
+    { comercio: 'Farmacia Global',        mensaje: 'Error al generar reporte PDF',       fecha: '2026-04-29', urgente: true  },
+    { comercio: 'Ferretería El Centro',   mensaje: 'Consulta: cómo exportar inventario', fecha: '2026-04-28', urgente: false },
   ],
   cart: [],
   view: 'dashboard',
+};
+
+const PLAN_PRICES = { basic: 29, advanced: 59, pro: 99 };
+const PLAN_LABELS = { basic: 'Básico', advanced: 'Avanzado', pro: 'Pro' };
+const PLAN_DESC   = {
+  basic:    'Solo Inventario y Ventas',
+  advanced: 'Básico + Gastos + Reportes PDF',
+  pro:      'Acceso Total + API WhatsApp Bot',
 };
 
 /* =========================================================
@@ -428,9 +446,16 @@ function loadFromStorage() {
     if (data.tenants) {
       Object.entries(data.tenants).forEach(([k, t]) => {
         if (STATE.tenants[k]) {
-          if (Array.isArray(t.inventario)) STATE.tenants[k].inventario = t.inventario;
-          if (Array.isArray(t.gastos))     STATE.tenants[k].gastos = t.gastos;
-          if (Array.isArray(t.ventas))     STATE.tenants[k].ventas = t.ventas;
+          // Restore mutable fields
+          if (Array.isArray(t.inventario))    STATE.tenants[k].inventario    = t.inventario;
+          if (Array.isArray(t.gastos))        STATE.tenants[k].gastos        = t.gastos;
+          if (Array.isArray(t.ventas))        STATE.tenants[k].ventas        = t.ventas;
+          if (t.plan_type)                    STATE.tenants[k].plan_type     = t.plan_type;
+          if (t.status)                       STATE.tenants[k].status        = t.status;
+          if (t.expiration_date)              STATE.tenants[k].expiration_date = t.expiration_date;
+        } else if (t._dynamic) {
+          // Restore fully dynamic tenants (newly registered)
+          STATE.tenants[k] = t;
         }
       });
     }
@@ -444,9 +469,20 @@ function saveToStorage() {
     bcv: STATE.bcv,
     tenants: Object.fromEntries(
       Object.entries(STATE.tenants).map(([k, t]) => [k, {
-        inventario: t.inventario,
-        gastos: t.gastos,
-        ventas: t.ventas,
+        _dynamic:        t._dynamic || false,
+        name:            t.name,
+        type:            t.type,
+        city:            t.city,
+        manager:         t.manager,
+        plan_type:       t.plan_type,
+        status:          t.status,
+        expiration_date: t.expiration_date,
+        kpis:            t.kpis,
+        inventario:      t.inventario,
+        gastos:          t.gastos,
+        ventas:          t.ventas,
+        ventasMes:       t.ventasMes,
+        productos:       t.productos,
       }])
     ),
   };
@@ -490,16 +526,26 @@ function render() {
 
   const bcvEl = $('#bcv-side');
   if (bcvEl) bcvEl.textContent = STATE.bcv.toFixed(2);
-  $('#tenant-title').textContent = tenant().name;
 
-  $$('#tenant-switcher').forEach(s => s.value = STATE.currentTenant);
+  if (STATE.view === 'adminDashboard') {
+    $('#tenant-title').textContent = 'Administración Global';
+  } else {
+    $('#tenant-title').textContent = tenant().name;
+  }
+
+  $$('#tenant-switcher').forEach(s => {
+    s.value = STATE.view === 'adminDashboard' ? 'admin-global' : STATE.currentTenant;
+  });
   $$('.nav-item').forEach(b => {
     b.classList.toggle('active', b.dataset.nav === STATE.view);
   });
 
   const view = $('#view');
   view.innerHTML = '';
-  view.appendChild(VIEWS[STATE.view]());
+  const viewFn = VIEWS[STATE.view];
+  if (viewFn) {
+    view.appendChild(viewFn());
+  }
   view.classList.remove('fade-in'); void view.offsetWidth; view.classList.add('fade-in');
 }
 
@@ -507,6 +553,176 @@ function render() {
    Componentes / Vistas
    ========================================================= */
 const VIEWS = {
+  adminDashboard() {
+    const tenantList  = Object.entries(STATE.tenants);
+    const today       = new Date();
+    const ingresosUSD = tenantList.reduce((acc, [,t]) => acc + (PLAN_PRICES[t.plan_type] || 0), 0);
+
+    // Vencimientos: próximos 5 días o ya vencidos
+    const WARN_DAYS = 5;
+    const expiring  = tenantList
+      .map(([k, t]) => {
+        const exp  = new Date(t.expiration_date);
+        const diff = Math.floor((exp - today) / 86400000);
+        return { key: k, t, exp, diff };
+      })
+      .filter(x => x.diff <= WARN_DAYS)
+      .sort((a, b) => a.diff - b.diff);
+
+    function expBadge(diff) {
+      if (diff < 0)   return `<span class="badge-neon text-[10px] px-2 py-1 rounded-md" style="background:rgba(244,63,94,.12);color:#fb7185;border-color:rgba(244,63,94,.4);">Vencido hace ${Math.abs(diff)} día(s)</span>`;
+      if (diff === 0) return `<span class="badge-neon text-[10px] px-2 py-1 rounded-md" style="background:rgba(244,63,94,.12);color:#fb7185;border-color:rgba(244,63,94,.4);">Vence hoy</span>`;
+      return `<span class="badge-neon text-[10px] px-2 py-1 rounded-md" style="background:rgba(251,146,60,.12);color:#fb923c;border-color:rgba(251,146,60,.4);">Vence en ${diff} día(s)</span>`;
+    }
+
+    const planColor = { basic: '#22d3ee', advanced: '#a78bfa', pro: '#00f2ff' };
+
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <!-- Header -->
+      <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4 mb-6">
+        <div>
+          <div class="text-[11px] uppercase tracking-widest text-muted">SuperAdmin · Vista Maestra</div>
+          <h2 class="text-2xl font-bold">Dashboard de Infraestructura</h2>
+        </div>
+        <div class="flex items-center gap-2">
+          <span class="pulse-dot"></span>
+          <span class="text-xs text-muted uppercase tracking-widest">Sistema operativo</span>
+        </div>
+      </div>
+
+      <!-- KPI Cards -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+        <!-- Ganancias Mensuales -->
+        <div class="glass p-5 neon-border">
+          <div class="text-[11px] uppercase tracking-widest text-muted">Ganancias Mensuales</div>
+          <div class="text-3xl font-bold neon-text mt-2">${fmtUSD(ingresosUSD)}</div>
+          <div class="text-xs text-muted mt-1">${tenantList.length} comercios activos</div>
+          <div class="divider my-3"></div>
+          <div class="space-y-1.5">
+            ${tenantList.map(([,t]) => `
+              <div class="flex items-center justify-between text-xs">
+                <span class="text-muted truncate max-w-[120px]">${t.name}</span>
+                <span class="font-semibold" style="color:${planColor[t.plan_type]}">${fmtUSD(PLAN_PRICES[t.plan_type])}<span class="text-muted font-normal">/mes</span></span>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
+        <!-- Estado del Sistema -->
+        <div class="glass p-5">
+          <div class="text-[11px] uppercase tracking-widest text-muted">Estado del Sistema</div>
+          <div class="mt-3 space-y-3">
+            <div class="flex items-center justify-between">
+              <span class="text-sm">API Core</span>
+              <span class="inline-flex items-center gap-2 text-xs text-emerald-400"><span class="pulse-dot" style="background:#34d399;box-shadow:0 0 8px #34d399;"></span>Operativa</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm">Base de Datos</span>
+              <span class="inline-flex items-center gap-2 text-xs text-emerald-400"><span class="pulse-dot" style="background:#34d399;box-shadow:0 0 8px #34d399;"></span>Conectada</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm">Auth Service</span>
+              <span class="inline-flex items-center gap-2 text-xs text-emerald-400"><span class="pulse-dot" style="background:#34d399;box-shadow:0 0 8px #34d399;"></span>Activo</span>
+            </div>
+            <div class="flex items-center justify-between">
+              <span class="text-sm">WhatsApp Bot</span>
+              <span class="inline-flex items-center gap-2 text-xs text-amber-400"><span class="pulse-dot" style="background:#fbbf24;box-shadow:0 0 8px #fbbf24;animation:none;"></span>Standby</span>
+            </div>
+          </div>
+        </div>
+
+        <!-- Notificaciones de Soporte -->
+        <div class="glass p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-[11px] uppercase tracking-widest text-muted">Soporte</div>
+            ${STATE.soporte.filter(s=>s.urgente).length > 0
+              ? `<span class="badge-neon text-[10px] px-2 py-1 rounded-md" style="background:rgba(244,63,94,.12);color:#fb7185;border-color:rgba(244,63,94,.4);">${STATE.soporte.filter(s=>s.urgente).length} urgente(s)</span>`
+              : `<span class="badge-neon text-[10px] px-2 py-1 rounded-md">Sin urgentes</span>`}
+          </div>
+          <div class="space-y-3">
+            ${STATE.soporte.length === 0
+              ? `<div class="text-sm text-muted text-center py-4">Sin reportes pendientes</div>`
+              : STATE.soporte.map(s => `
+                <div class="glass p-3" style="${s.urgente ? 'border-color:rgba(244,63,94,.3);' : ''}">
+                  <div class="flex items-start gap-2">
+                    ${s.urgente ? `<span class="pulse-dot mt-1 shrink-0" style="background:#fb7185;box-shadow:0 0 8px #fb7185;"></span>` : `<span class="w-2 h-2 rounded-full bg-white/20 mt-1 shrink-0"></span>`}
+                    <div>
+                      <div class="text-xs font-semibold">${s.comercio}</div>
+                      <div class="text-[11px] text-muted mt-0.5">${s.mensaje}</div>
+                      <div class="text-[10px] text-muted mt-1">${s.fecha}</div>
+                    </div>
+                  </div>
+                </div>
+              `).join('')}
+          </div>
+        </div>
+
+        <!-- Vencimientos -->
+        <div class="glass p-5">
+          <div class="flex items-center justify-between mb-3">
+            <div class="text-[11px] uppercase tracking-widest text-muted">Vencimientos</div>
+            ${expiring.length > 0
+              ? `<span class="badge-neon text-[10px] px-2 py-1 rounded-md" style="background:rgba(251,146,60,.12);color:#fb923c;border-color:rgba(251,146,60,.4);">${expiring.length} alerta(s)</span>`
+              : `<span class="badge-neon text-[10px] px-2 py-1 rounded-md">Todo en orden</span>`}
+          </div>
+          ${expiring.length === 0
+            ? `<div class="text-sm text-muted text-center py-4">Sin vencimientos próximos</div>`
+            : `<div class="space-y-3">
+                ${expiring.map(x => `
+                  <div class="glass p-3">
+                    <div class="text-xs font-semibold">${x.t.name}</div>
+                    <div class="text-[11px] text-muted mt-0.5">${x.t.expiration_date}</div>
+                    <div class="mt-1.5">${expBadge(x.diff)}</div>
+                  </div>
+                `).join('')}
+              </div>`}
+        </div>
+      </div>
+
+      <!-- Tenants Overview Table -->
+      <div class="glass mt-6 overflow-hidden">
+        <div class="flex items-center justify-between p-5 pb-3">
+          <div>
+            <div class="text-[11px] uppercase tracking-widest text-muted">Comercios registrados</div>
+            <div class="text-lg font-semibold">${tenantList.length} tenant(s)</div>
+          </div>
+          <button class="btn btn-primary text-sm" onclick="openRegistroComercioModal()">+ Nuevo comercio</button>
+        </div>
+        <div class="table-scroll scroll-thin">
+          <table>
+            <thead>
+              <tr><th>Comercio</th><th>Tipo</th><th>Ciudad</th><th>Plan</th><th>Estado</th><th>Vencimiento</th><th>MRR</th><th></th></tr>
+            </thead>
+            <tbody>
+              ${tenantList.map(([k,t]) => {
+                const exp  = new Date(t.expiration_date);
+                const diff = Math.floor((exp - today) / 86400000);
+                const statusColor = t.status === 'active' ? '#34d399' : t.status === 'suspended' ? '#fbbf24' : '#fb7185';
+                const statusLabel = { active: 'Activo', suspended: 'Suspendido', expired: 'Vencido' }[t.status] || t.status;
+                return `
+                  <tr>
+                    <td class="font-semibold">${t.name}</td>
+                    <td class="text-muted">${t.type}</td>
+                    <td class="text-muted">${t.city}</td>
+                    <td><span class="badge-neon text-[10px] px-2 py-1 rounded-md" style="color:${planColor[t.plan_type]};border-color:${planColor[t.plan_type]}40;background:${planColor[t.plan_type]}15;">${PLAN_LABELS[t.plan_type]}</span></td>
+                    <td><span class="inline-flex items-center gap-1.5 text-xs" style="color:${statusColor}"><span class="pulse-dot" style="background:${statusColor};box-shadow:0 0 8px ${statusColor}${diff < 0 ? ';animation:none' : ''};"></span>${statusLabel}</span></td>
+                    <td class="text-muted text-sm">${t.expiration_date}${diff <= 5 ? ` <span style="color:#fb923c;font-size:11px;">(${diff < 0 ? 'vencido' : diff + 'd'})</span>` : ''}</td>
+                    <td class="font-semibold neon-text">${fmtUSD(PLAN_PRICES[t.plan_type])}</td>
+                    <td class="text-right">
+                      <button class="btn btn-ghost text-xs" onclick="STATE.currentTenant='${k}'; STATE.view='dashboard'; render(); toast('Viendo: ${t.name}');">Ver</button>
+                    </td>
+                  </tr>
+                `;
+              }).join('')}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    `;
+    return wrap;
+  },
+
   dashboard() {
     const t = tenant();
     const ventasBs = usdToBs(t.kpis.ventasUSD);
@@ -1054,16 +1270,60 @@ const VIEWS = {
       <div class="glass mt-4 p-5">
         <div class="text-sm font-semibold mb-3">Tenants registrados</div>
         <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          ${Object.entries(STATE.tenants).map(([k,t]) => `
-            <div class="glass p-4 flex items-center justify-between">
-              <div>
-                <div class="font-semibold">${t.name}</div>
-                <div class="text-xs text-muted">${t.type} · ${t.city}</div>
+          ${Object.entries(STATE.tenants).map(([k,t]) => {
+            const planColor = { basic: '#22d3ee', advanced: '#a78bfa', pro: '#00f2ff' };
+            const expDate   = new Date(t.expiration_date);
+            const today2    = new Date();
+            const diff2     = Math.floor((expDate - today2) / 86400000);
+            const expClass  = diff2 < 0 ? 'color:#fb7185' : diff2 <= 5 ? 'color:#fb923c' : 'color:#94a3b8';
+            return `
+            <div class="glass p-4">
+              <div class="flex items-start justify-between gap-2">
+                <div class="min-w-0">
+                  <div class="font-semibold truncate">${t.name}</div>
+                  <div class="text-xs text-muted">${t.type} · ${t.city}</div>
+                  <div class="flex items-center gap-2 mt-2 flex-wrap">
+                    <span class="badge-neon text-[10px] px-2 py-1 rounded-md" style="color:${planColor[t.plan_type]};border-color:${planColor[t.plan_type]}40;background:${planColor[t.plan_type]}15;">${PLAN_LABELS[t.plan_type]}</span>
+                    <span class="text-[11px]" style="${expClass}">Vence: ${t.expiration_date}</span>
+                  </div>
+                </div>
+                <button class="btn btn-ghost text-xs shrink-0" onclick="STATE.currentTenant='${k}'; render(); toast('Tenant activo: ${t.name}');">Activar</button>
               </div>
-              <button class="btn btn-ghost text-xs" onclick="STATE.currentTenant='${k}'; render(); toast('Tenant activo: ${t.name}');">Activar</button>
             </div>
+          `}).join('')}
+        </div>
+      </div>
+
+      <!-- Registro de Comercio con Plan -->
+      <div class="glass mt-4 p-5">
+        <div class="text-sm font-semibold mb-1">Registrar nuevo comercio</div>
+        <p class="text-xs text-muted mb-4">Al guardar, se asigna el plan seleccionado y la fecha de vencimiento se establece automáticamente a 30 días.</p>
+
+        <!-- Plan Radio Cards -->
+        <div class="text-[11px] uppercase tracking-widest text-muted mb-2">Seleccionar plan</div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4" id="plan-cards">
+          ${['basic','advanced','pro'].map((plan, idx) => `
+            <label class="cursor-pointer">
+              <input type="radio" name="reg-plan" value="${plan}" class="sr-only" ${idx === 1 ? 'checked' : ''} />
+              <div class="glass p-4 rounded-xl border transition plan-card ${idx === 1 ? 'plan-card-selected' : ''}" data-plan="${plan}"
+                   style="border-color:${idx===1?({ basic:'#22d3ee', advanced:'#a78bfa', pro:'#00f2ff' }[plan]):'rgba(148,163,184,0.15)'};">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs font-bold uppercase tracking-widest" style="color:${{ basic:'#22d3ee', advanced:'#a78bfa', pro:'#00f2ff' }[plan]}">${PLAN_LABELS[plan]}</span>
+                  <span class="text-sm font-bold neon-text">${ { basic:'$29', advanced:'$59', pro:'$99' }[plan] }<span class="text-muted text-[10px] font-normal">/mes</span></span>
+                </div>
+                <div class="text-[11px] text-muted">${PLAN_DESC[plan]}</div>
+              </div>
+            </label>
           `).join('')}
         </div>
+
+        <form id="form-registro-comercio" class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
+          <input class="input md:col-span-2" name="nombre" placeholder="Nombre del comercio" required />
+          <input class="input" name="tipo" placeholder="Tipo (Ferretería, Farmacia…)" required />
+          <input class="input" name="ciudad" placeholder="Ciudad" required />
+          <input class="input" name="gerente" placeholder="Nombre del gerente" required />
+          <button class="btn btn-primary">Registrar comercio</button>
+        </form>
       </div>
 
       <div class="glass mt-4 p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -1095,6 +1355,64 @@ const VIEWS = {
           resetStorage();
         }
       });
+
+      // Plan radio cards — interactive selection highlight
+      const PLAN_ACCENT = { basic: '#22d3ee', advanced: '#a78bfa', pro: '#00f2ff' };
+      document.querySelectorAll('input[name="reg-plan"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+          document.querySelectorAll('.plan-card').forEach(card => {
+            const plan = card.dataset.plan;
+            const isSelected = plan === radio.value;
+            card.style.borderColor = isSelected ? PLAN_ACCENT[plan] : 'rgba(148,163,184,0.15)';
+            card.style.background  = isSelected
+              ? `linear-gradient(180deg, ${PLAN_ACCENT[plan]}14, ${PLAN_ACCENT[plan]}08)`
+              : '';
+          });
+        });
+      });
+
+      // Registration form
+      const formReg = $('#form-registro-comercio');
+      if (formReg) {
+        formReg.addEventListener('submit', e => {
+          e.preventDefault();
+          const fd       = new FormData(e.target);
+          const nombre   = String(fd.get('nombre')).trim();
+          const tipo     = String(fd.get('tipo')).trim();
+          const ciudad   = String(fd.get('ciudad')).trim();
+          const gerente  = String(fd.get('gerente')).trim();
+          const planSel  = document.querySelector('input[name="reg-plan"]:checked');
+          const planType = planSel ? planSel.value : 'basic';
+
+          if (!nombre || !tipo || !ciudad || !gerente) { toast('Completá todos los campos'); return; }
+
+          const expDate = new Date();
+          expDate.setDate(expDate.getDate() + 30);
+          const expStr = expDate.toISOString().slice(0, 10);
+
+          const key = nombre.toLowerCase().replace(/\s+/g, '_').replace(/[^a-z0-9_]/g, '').slice(0, 20) + '_' + Date.now().toString(36);
+          STATE.tenants[key] = {
+            _dynamic: true,
+            name: nombre,
+            type: tipo,
+            city: ciudad,
+            manager: gerente,
+            plan_type: planType,
+            status: 'active',
+            expiration_date: expStr,
+            kpis: { ventasUSD: 0, ticketProm: 0, productos: 0, clientes: 0 },
+            inventario: [],
+            gastos: [],
+            ventasMes: Array(12).fill(0),
+            productos: [],
+            ventas: [],
+          };
+          rebuildTenantSwitcher();
+          saveToStorage();
+          toast(`Comercio "${nombre}" registrado · Plan ${PLAN_LABELS[planType]} · Vence ${expStr}`);
+          render();
+        });
+      }
     }, 0);
 
     return wrap;
@@ -1483,12 +1801,22 @@ function barChart(data) {
    ========================================================= */
 function setView(v) {
   // Bloqueo: no-admins no pueden navegar a vistas restringidas
-  if (!isAdmin() && (v === 'configuracion' || v === 'usuarios')) {
+  if (!isAdmin() && (v === 'configuracion' || v === 'usuarios' || v === 'adminDashboard')) {
     toast('No tenés permisos para acceder a esa sección');
     return;
   }
   STATE.view = v;
   render();
+}
+
+function openRegistroComercioModal() {
+  // Navigate to configuracion and scroll to the registration form
+  STATE.view = 'configuracion';
+  render();
+  setTimeout(() => {
+    const form = document.getElementById('form-registro-comercio');
+    if (form) form.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  }, 100);
 }
 
 document.addEventListener('click', e => {
@@ -1499,11 +1827,20 @@ document.addEventListener('click', e => {
 document.addEventListener('change', e => {
   if (e.target && e.target.id === 'tenant-switcher') {
     if (!isAdmin()) { e.target.value = STATE.currentTenant; return; }
-    STATE.currentTenant = e.target.value;
-    STATE.cart = [];
-    saveToStorage();
-    toast(`Cambiado a: ${tenant().name}`);
-    render();
+    const val = e.target.value;
+    if (val === 'admin-global') {
+      STATE.view = 'adminDashboard';
+      STATE.cart = [];
+      render();
+      toast('Vista: Administración Global');
+    } else {
+      STATE.currentTenant = val;
+      STATE.cart = [];
+      if (STATE.view === 'adminDashboard') STATE.view = 'dashboard';
+      saveToStorage();
+      toast(`Cambiado a: ${tenant().name}`);
+      render();
+    }
   }
 });
 
@@ -1518,6 +1855,33 @@ const USERS = {
 };
 
 function isAdmin() { return STATE.session && STATE.session.role === 'admin'; }
+
+function rebuildTenantSwitcher() {
+  $$('#tenant-switcher').forEach(sel => {
+    const prevVal = sel.value;
+    sel.innerHTML = '';
+    if (isAdmin()) {
+      const adminOpt = document.createElement('option');
+      adminOpt.value = 'admin-global';
+      adminOpt.textContent = '⬡ ADMINISTRACIÓN GLOBAL';
+      adminOpt.style.color = '#00f2ff';
+      sel.appendChild(adminOpt);
+    }
+    Object.entries(STATE.tenants).forEach(([k, t]) => {
+      const opt = document.createElement('option');
+      opt.value = k;
+      opt.textContent = t.name;
+      sel.appendChild(opt);
+    });
+    if (prevVal === 'admin-global' && isAdmin()) {
+      sel.value = 'admin-global';
+    } else if (STATE.tenants[prevVal]) {
+      sel.value = prevVal;
+    } else {
+      sel.value = STATE.currentTenant;
+    }
+  });
+}
 
 function applySessionToUI() {
   const s = STATE.session;
@@ -1535,17 +1899,30 @@ function applySessionToUI() {
   });
 
   // Si el cliente está parado en una vista restringida, mandarlo al dashboard
-  if (hideForClient && (STATE.view === 'configuracion' || STATE.view === 'usuarios')) {
+  if (hideForClient && (STATE.view === 'configuracion' || STATE.view === 'usuarios' || STATE.view === 'adminDashboard')) {
     STATE.view = 'dashboard';
   }
+
+  // Reconstruir el tenant switcher (añade opción admin-global para superadmins)
+  rebuildTenantSwitcher();
+
+  // Ajustar el valor del selector según la vista actual
+  $$('#tenant-switcher').forEach(sel => {
+    sel.value = STATE.view === 'adminDashboard' ? 'admin-global' : STATE.currentTenant;
+  });
 
   // Avatar + datos
   const avatar = document.getElementById('user-avatar');
   const uname = document.getElementById('user-name');
   const urole = document.getElementById('user-role');
+  const sidebarBadge = document.getElementById('sidebar-role-badge');
   if (avatar) avatar.textContent = (s.name || s.user).slice(0,2).toUpperCase();
   if (uname) uname.textContent = s.name || s.user;
   if (urole) urole.textContent = s.role === 'admin' ? 'Super Admin' : 'Cliente';
+  if (sidebarBadge) {
+    sidebarBadge.textContent = s.role === 'admin' ? 'Super Admin' : (STATE.tenants[s.tenantKey]?.name || s.name);
+    sidebarBadge.style.color = s.role === 'admin' ? '#00f2ff' : '';
+  }
 }
 
 function showLogin() {
