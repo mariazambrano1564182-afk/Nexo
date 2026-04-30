@@ -641,13 +641,17 @@ const VIEWS = {
         <div class="glass p-5 neon-border">
           <div class="text-[11px] uppercase tracking-widest text-muted">Ganancias Mensuales</div>
           <div class="text-3xl font-bold neon-text mt-2">${fmtUSD(ingresosUSD)}</div>
+          <div class="text-xs text-muted mt-0.5">${fmtBS(usdToBs(ingresosUSD))}</div>
           <div class="text-xs text-muted mt-1">${tenantList.length} comercios activos</div>
           <div class="divider my-3"></div>
           <div class="space-y-1.5">
             ${tenantList.map(([,t]) => `
               <div class="flex items-center justify-between text-xs">
                 <span class="text-muted truncate max-w-[120px]">${t.name}</span>
-                <span class="font-semibold" style="color:${planColor[t.plan_type]}">${fmtUSD(PLAN_PRICES[t.plan_type])}<span class="text-muted font-normal">/mes</span></span>
+                <span class="text-right">
+                  <span class="font-semibold block" style="color:${planColor[t.plan_type]}">${fmtUSD(PLAN_PRICES[t.plan_type])}<span class="text-muted font-normal">/mes</span></span>
+                  <span class="text-[10px] text-muted block">${fmtBS(usdToBs(PLAN_PRICES[t.plan_type]))}</span>
+                </span>
               </div>
             `).join('')}
           </div>
@@ -751,7 +755,10 @@ const VIEWS = {
                     <td><span class="badge-neon text-[10px] px-2 py-1 rounded-md" style="color:${planColor[t.plan_type]};border-color:${planColor[t.plan_type]}40;background:${planColor[t.plan_type]}15;">${PLAN_LABELS[t.plan_type]}</span></td>
                     <td><span class="inline-flex items-center gap-1.5 text-xs" style="color:${statusColor}"><span class="pulse-dot" style="background:${statusColor};box-shadow:0 0 8px ${statusColor}${diff < 0 ? ';animation:none' : ''};"></span>${statusLabel}</span></td>
                     <td class="text-muted text-sm">${t.expiration_date}${diff <= 5 ? ` <span style="color:#fb923c;font-size:11px;">(${diff < 0 ? 'vencido' : diff + 'd'})</span>` : ''}</td>
-                    <td class="font-semibold neon-text">${fmtUSD(PLAN_PRICES[t.plan_type])}</td>
+                    <td>
+                      <div class="font-semibold neon-text">${fmtUSD(PLAN_PRICES[t.plan_type])}</div>
+                      <div class="text-[10px] text-muted">${fmtBS(usdToBs(PLAN_PRICES[t.plan_type]))}</div>
+                    </td>
                   </tr>
                 `;
               }).join('')}
@@ -826,12 +833,27 @@ const VIEWS = {
             <div class="flex justify-between"><span class="text-muted">Ingresos USD</span><span class="font-semibold">${fmtUSD(t.kpis.ventasUSD)}</span></div>
             <div class="flex justify-between"><span class="text-muted">Ingresos BS</span><span class="font-semibold">${fmtBS(ventasBs)}</span></div>
             <div class="divider"></div>
-            <div class="flex justify-between"><span class="text-muted">Egresos totales</span><span class="font-semibold">${fmtUSD(totalGastosUSD)}</span></div>
-            <div class="flex justify-between"><span class="text-muted">Valor de inventario</span><span class="font-semibold">${fmtUSD(valorInvUSD)}</span></div>
+            <div class="flex justify-between items-start">
+              <span class="text-muted">Egresos totales</span>
+              <span class="text-right">
+                <span class="font-semibold block">${fmtUSD(totalGastosUSD)}</span>
+                <span class="text-[10px] text-muted block">${fmtBS(usdToBs(totalGastosUSD))}</span>
+              </span>
+            </div>
+            <div class="flex justify-between items-start">
+              <span class="text-muted">Valor de inventario</span>
+              <span class="text-right">
+                <span class="font-semibold block">${fmtUSD(valorInvUSD)}</span>
+                <span class="text-[10px] text-muted block">${fmtBS(usdToBs(valorInvUSD))}</span>
+              </span>
+            </div>
             <div class="divider"></div>
             <div class="flex justify-between items-end">
               <span class="text-muted">Utilidad estimada</span>
-              <span class="text-xl font-bold neon-text">${fmtUSD(t.kpis.ventasUSD - totalGastosUSD)}</span>
+              <span class="text-right">
+                <span class="text-xl font-bold neon-text block">${fmtUSD(t.kpis.ventasUSD - totalGastosUSD)}</span>
+                <span class="text-[10px] text-muted block">${fmtBS(usdToBs(t.kpis.ventasUSD - totalGastosUSD))}</span>
+              </span>
             </div>
           </div>
         </div>
@@ -1092,22 +1114,26 @@ const VIEWS = {
         <div class="table-scroll scroll-thin">
           <table>
             <thead>
-              <tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Monto</th><th>Moneda</th><th>Equivalente USD</th><th></th></tr>
+              <tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Monto</th><th>Moneda</th><th>Equivalente USD</th><th>Equivalente BS</th><th></th></tr>
             </thead>
             <tbody>
               ${t.gastos.length === 0 ? `
-                <tr><td colspan="7" class="text-center text-muted py-10">Sin gastos registrados.</td></tr>
-              ` : t.gastos.map((g, idx) => `
+                <tr><td colspan="8" class="text-center text-muted py-10">Sin gastos registrados.</td></tr>
+              ` : t.gastos.map((g, idx) => {
+                const equivUSD = g.moneda === 'USD' ? g.monto : bsToUsd(g.monto);
+                const equivBS  = g.moneda === 'BS'  ? g.monto : usdToBs(g.monto);
+                return `
                 <tr>
                   <td class="text-muted">${g.fecha}</td>
                   <td><span class="badge-neon text-[10px] px-2 py-1 rounded-md">${g.categoria}</span></td>
                   <td>${g.desc}</td>
                   <td class="font-semibold">${g.moneda === 'USD' ? fmtUSD(g.monto) : fmtBS(g.monto)}</td>
                   <td class="text-muted">${g.moneda}</td>
-                  <td>${g.moneda === 'USD' ? fmtUSD(g.monto) : fmtUSD(bsToUsd(g.monto))}</td>
+                  <td>${fmtUSD(equivUSD)}</td>
+                  <td class="text-neon">${fmtBS(equivBS)}</td>
                   <td class="text-right"><button class="btn btn-danger text-xs" onclick="deleteGasto(${idx})">Eliminar</button></td>
                 </tr>
-              `).join('')}
+              `}).join('')}
             </tbody>
           </table>
         </div>
@@ -1162,9 +1188,9 @@ const VIEWS = {
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-4 gap-4">
-        ${reportCard('Ventas mes (estim.)', fmtUSD(t.kpis.ventasUSD), '12 meses', '#00f2ff')}
-        ${reportCard('Ventas POS reales', fmtUSD(ventasUSD), `${ventas.length} recibo(s)`, '#22d3ee')}
-        ${reportCard('Egresos', fmtUSD(totalGastosUSD), 'Mes en curso', '#fb7185')}
+        ${reportCard('Ventas mes (estim.)', fmtUSD(t.kpis.ventasUSD), `${fmtBS(usdToBs(t.kpis.ventasUSD))} · 12 meses`, '#00f2ff')}
+        ${reportCard('Ventas POS reales', fmtUSD(ventasUSD), `${fmtBS(usdToBs(ventasUSD))} · ${ventas.length} recibo(s)`, '#22d3ee')}
+        ${reportCard('Egresos', fmtUSD(totalGastosUSD), `${fmtBS(usdToBs(totalGastosUSD))} · Mes en curso`, '#fb7185')}
         ${reportCard('Valor inventario', fmtUSD(valorInvUSD), `${fmtBS(usdToBs(valorInvUSD))} · BCV ${STATE.bcv.toFixed(2)}`, '#a78bfa')}
       </div>
 
@@ -1215,10 +1241,26 @@ const VIEWS = {
       <div class="glass mt-4 p-5">
         <div class="text-sm font-semibold mb-3">Estado de resultados (simplificado)</div>
         <div class="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
-          <div><div class="text-muted text-xs">Ingresos (estim.)</div><div class="text-lg font-bold">${fmtUSD(t.kpis.ventasUSD)}</div></div>
-          <div><div class="text-muted text-xs">Egresos</div><div class="text-lg font-bold">${fmtUSD(totalGastosUSD)}</div></div>
-          <div><div class="text-muted text-xs">Utilidad</div><div class="text-lg font-bold neon-text">${fmtUSD(t.kpis.ventasUSD - totalGastosUSD)}</div></div>
-          <div><div class="text-muted text-xs">Margen</div><div class="text-lg font-bold">${(((t.kpis.ventasUSD - totalGastosUSD) / t.kpis.ventasUSD) * 100).toFixed(1)}%</div></div>
+          <div>
+            <div class="text-muted text-xs">Ingresos (estim.)</div>
+            <div class="text-lg font-bold">${fmtUSD(t.kpis.ventasUSD)}</div>
+            <div class="text-[10px] text-muted">${fmtBS(usdToBs(t.kpis.ventasUSD))}</div>
+          </div>
+          <div>
+            <div class="text-muted text-xs">Egresos</div>
+            <div class="text-lg font-bold">${fmtUSD(totalGastosUSD)}</div>
+            <div class="text-[10px] text-muted">${fmtBS(usdToBs(totalGastosUSD))}</div>
+          </div>
+          <div>
+            <div class="text-muted text-xs">Utilidad</div>
+            <div class="text-lg font-bold neon-text">${fmtUSD(t.kpis.ventasUSD - totalGastosUSD)}</div>
+            <div class="text-[10px] text-muted">${fmtBS(usdToBs(t.kpis.ventasUSD - totalGastosUSD))}</div>
+          </div>
+          <div>
+            <div class="text-muted text-xs">Margen</div>
+            <div class="text-lg font-bold">${(((t.kpis.ventasUSD - totalGastosUSD) / t.kpis.ventasUSD) * 100).toFixed(1)}%</div>
+            <div class="text-[10px] text-muted">BCV ${STATE.bcv.toFixed(2)}</div>
+          </div>
         </div>
       </div>
 
@@ -1226,7 +1268,7 @@ const VIEWS = {
         <div class="flex items-center justify-between p-5 pb-3">
           <div>
             <div class="text-[11px] uppercase tracking-widest text-muted">Histórico de ventas</div>
-            <div class="text-lg font-semibold">${ventas.length} recibo(s) · ${fmtUSD(ventasUSD)}</div>
+            <div class="text-lg font-semibold">${ventas.length} recibo(s) · ${fmtUSD(ventasUSD)} <span class="text-muted text-xs font-normal">· ${fmtBS(usdToBs(ventasUSD))}</span></div>
           </div>
           <div class="flex gap-2">
             <button class="btn btn-ghost text-xs" onclick="exportVentasCSV()">Exportar Excel</button>
@@ -1990,14 +2032,22 @@ function openReceiptModal(venta) {
               <div class="col-span-2 text-right">P.U.</div>
               <div class="col-span-2 text-right">Subt.</div>
             </div>
-            ${venta.items.map(it => `
+            ${venta.items.map(it => {
+              const subt = it.precio * it.qty;
+              return `
               <div class="grid grid-cols-12 text-sm py-1.5">
                 <div class="col-span-6 truncate">${it.nombre}</div>
                 <div class="col-span-2 text-center">${it.qty}</div>
-                <div class="col-span-2 text-right">${fmtUSD(it.precio)}</div>
-                <div class="col-span-2 text-right font-semibold">${fmtUSD(it.precio * it.qty)}</div>
+                <div class="col-span-2 text-right">
+                  <div>${fmtUSD(it.precio)}</div>
+                  <div class="text-[10px] text-muted">${fmtBS(usdToBs(it.precio))}</div>
+                </div>
+                <div class="col-span-2 text-right">
+                  <div class="font-semibold">${fmtUSD(subt)}</div>
+                  <div class="text-[10px] text-muted">${fmtBS(usdToBs(subt))}</div>
+                </div>
               </div>
-            `).join('')}
+            `}).join('')}
           </div>
 
           <div class="divider"></div>
@@ -2160,11 +2210,31 @@ function exportReporteFinancieroPDF() {
           </div>
           <div class="divider"></div>
           <div class="grid grid-cols-2 gap-4 py-4 text-sm">
-            <div><div class="text-muted text-xs">Ventas registradas (POS)</div><div class="text-lg font-bold">${fmtUSD(ventasReales)}</div></div>
-            <div><div class="text-muted text-xs">Ventas mes (estimado)</div><div class="text-lg font-bold">${fmtUSD(t.kpis.ventasUSD)}</div></div>
-            <div><div class="text-muted text-xs">Egresos totales</div><div class="text-lg font-bold">${fmtUSD(totalGastosUSD)}</div></div>
-            <div><div class="text-muted text-xs">Valor inventario (costo)</div><div class="text-lg font-bold">${fmtUSD(valorInvUSD)}</div></div>
-            <div class="col-span-2"><div class="text-muted text-xs">Utilidad estimada</div><div class="text-2xl font-bold neon-text">${fmtUSD(t.kpis.ventasUSD - totalGastosUSD)}</div></div>
+            <div>
+              <div class="text-muted text-xs">Ventas registradas (POS)</div>
+              <div class="text-lg font-bold">${fmtUSD(ventasReales)}</div>
+              <div class="text-[10px] text-muted">${fmtBS(usdToBs(ventasReales))}</div>
+            </div>
+            <div>
+              <div class="text-muted text-xs">Ventas mes (estimado)</div>
+              <div class="text-lg font-bold">${fmtUSD(t.kpis.ventasUSD)}</div>
+              <div class="text-[10px] text-muted">${fmtBS(usdToBs(t.kpis.ventasUSD))}</div>
+            </div>
+            <div>
+              <div class="text-muted text-xs">Egresos totales</div>
+              <div class="text-lg font-bold">${fmtUSD(totalGastosUSD)}</div>
+              <div class="text-[10px] text-muted">${fmtBS(usdToBs(totalGastosUSD))}</div>
+            </div>
+            <div>
+              <div class="text-muted text-xs">Valor inventario (costo)</div>
+              <div class="text-lg font-bold">${fmtUSD(valorInvUSD)}</div>
+              <div class="text-[10px] text-muted">${fmtBS(usdToBs(valorInvUSD))}</div>
+            </div>
+            <div class="col-span-2">
+              <div class="text-muted text-xs">Utilidad estimada</div>
+              <div class="text-2xl font-bold neon-text">${fmtUSD(t.kpis.ventasUSD - totalGastosUSD)}</div>
+              <div class="text-xs text-muted">${fmtBS(usdToBs(t.kpis.ventasUSD - totalGastosUSD))}</div>
+            </div>
           </div>
           <div class="divider"></div>
           <div class="text-center text-[11px] text-muted py-3">Documento generado por Nexo Core V3</div>
@@ -2280,7 +2350,10 @@ function ventasPorMetodoChart(t) {
       <div>
         <div class="flex items-center justify-between text-xs mb-1">
           <span class="text-muted">${m.label}</span>
-          <span class="font-semibold">${fmtUSD(v)} <span class="text-muted font-normal">· ${pct.toFixed(1)}%</span></span>
+          <span class="text-right">
+            <span class="font-semibold block">${fmtUSD(v)} <span class="text-muted font-normal">· ${pct.toFixed(1)}%</span></span>
+            <span class="text-[10px] text-muted block">${fmtBS(usdToBs(v))}</span>
+          </span>
         </div>
         <div class="h-2 rounded-full bg-white/5 overflow-hidden">
           <div style="width:${w}%; height:100%; background:linear-gradient(90deg, ${m.color}, ${m.color}55); box-shadow: 0 0 8px ${m.color}66;"></div>
@@ -2294,7 +2367,7 @@ function ventasPorMetodoChart(t) {
       <div class="flex items-center justify-between mb-3">
         <div>
           <div class="text-[11px] uppercase tracking-widest text-muted">Ventas por método de pago</div>
-          <div class="text-sm font-semibold">${fmtUSD(totalUSD)} <span class="text-muted text-xs font-normal">· ${ventas.length} venta(s)</span></div>
+          <div class="text-sm font-semibold">${fmtUSD(totalUSD)} <span class="text-muted text-xs font-normal">· ${fmtBS(usdToBs(totalUSD))} · ${ventas.length} venta(s)</span></div>
         </div>
       </div>
       ${ventas.length === 0
