@@ -2469,6 +2469,11 @@ function restoreSession() {
     const raw = sessionStorage.getItem(SESSION_KEY);
     if (!raw) return false;
     STATE.session = JSON.parse(raw);
+    // Migrar sesiones antiguas con role:'admin' → 'superadmin'
+    if (STATE.session && STATE.session.role === 'admin') {
+      STATE.session.role = 'superadmin';
+      sessionStorage.setItem(SESSION_KEY, JSON.stringify(STATE.session));
+    }
     return !!STATE.session;
   } catch { return false; }
 }
