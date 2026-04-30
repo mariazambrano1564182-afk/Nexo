@@ -242,6 +242,15 @@
           <h1 id="tenant-title" class="text-lg md:text-xl font-bold truncate">Ferretería El Centro</h1>
         </div>
 
+        <!-- TASA BCV badge (superadmin-only) -->
+        <div id="bcv-topbar-card" data-role="admin" class="glass px-3 py-1.5 flex items-center gap-2" title="Tasa BCV vigente · sólo SuperAdmin">
+          <svg class="w-4 h-4 text-neon shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1v22"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+          <div class="leading-tight">
+            <div class="text-[9px] uppercase tracking-widest text-muted">Tasa BCV</div>
+            <div class="text-sm font-semibold neon-text">Bs <span id="bcv-topbar-val">—</span></div>
+          </div>
+        </div>
+
         <!-- TENANT SWITCHER (superadmin-only) -->
         <div id="tenant-switcher-wrap" data-role="admin" class="glass px-2 py-1.5 flex items-center gap-2">
           <span class="hidden sm:block text-[10px] uppercase tracking-widest text-muted px-2">Tenant</span>
@@ -558,6 +567,8 @@ function render() {
   // 3. Actualizar elementos del topbar
   const bcvEl = $('#bcv-side');
   if (bcvEl) bcvEl.textContent = STATE.bcv.toFixed(2);
+  const bcvTop = $('#bcv-topbar-val');
+  if (bcvTop) bcvTop.textContent = STATE.bcv.toFixed(2);
 
   if (STATE.view === 'adminDashboard') {
     $('#tenant-title').textContent = 'Administración Global';
@@ -761,11 +772,23 @@ const VIEWS = {
       return acc + costo * p.stock;
     }, 0);
 
+    // Alerta de stock bajo: productos con stock <= stockMin (default 5)
+    const lowStockItems = t.inventario.filter(p => {
+      const min = (typeof p.stockMin === 'number' && p.stockMin >= 0) ? p.stockMin : 5;
+      return p.stock <= min;
+    });
+    const lowCount = lowStockItems.length;
+    const lowSubLabel = lowCount === 0
+      ? 'Todo el stock OK'
+      : (lowStockItems[0].nombre + (lowCount > 1 ? ` +${lowCount - 1}` : ''));
+    const lowTrend    = lowCount === 0 ? 'flat' : 'down';
+    const lowTrendVal = lowCount === 0 ? 'OK' : `${lowCount} crítico(s)`;
+
     const wrap = document.createElement('div');
     wrap.innerHTML = `
       <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
         ${kpiCard('Ventas del mes', fmtUSD(t.kpis.ventasUSD), fmtBS(ventasBs), 'up', '+12.4%')}
-        ${kpiCard('Ticket promedio', fmtUSD(t.kpis.ticketProm), fmtBS(usdToBs(t.kpis.ticketProm)), 'up', '+3.1%')}
+        ${kpiCard('Alerta de stock bajo', String(lowCount), lowSubLabel, lowTrend, lowTrendVal)}
         ${kpiCard('Productos activos', t.kpis.productos.toLocaleString(), t.type, 'flat', '')}
         ${kpiCard('Clientes únicos', t.kpis.clientes.toLocaleString(), 'Últimos 30 días', 'up', '+8.7%')}
         <div class="glass p-4 flex flex-col justify-between neon-border">
@@ -944,22 +967,30 @@ const VIEWS = {
           <table>
             <thead>
               <tr>
-                <th>SKU</th><th>Producto</th><th>Stock</th><th>Costo</th><th>Precio USD</th><th>Equivalente BS</th><th></th>
+                <th>SKU</th><th>Producto</th><th>Stock</th><th>Stock mín.</th><th>Costo</th><th>Precio USD</th><th>Equivalente BS</th><th></th>
               </tr>
             </thead>
             <tbody>
               ${t.inventario.length === 0 ? `
-                <tr><td colspan="7" class="text-center text-muted py-10">Sin productos cargados. Agregá el primero abajo.</td></tr>
+                <tr><td colspan="8" class="text-center text-muted py-10">Sin productos cargados. Agregá el primero abajo.</td></tr>
               ` : t.inventario.map((p, idx) => {
                 const precioUSD = p.moneda === 'USD' ? p.precioUSD : bsToUsd(p.precioBS);
                 const costoStr  = p.moneda === 'USD'
                   ? (p.costoUSD != null ? fmtUSD(p.costoUSD) : '—')
                   : (p.costoBS  != null ? fmtBS(p.costoBS)  : '—');
+                const minVal = (typeof p.stockMin === 'number' && p.stockMin >= 0) ? p.stockMin : 5;
+                const isLow  = p.stock <= minVal;
                 return `
                   <tr>
                     <td class="text-muted">${p.sku || '—'}</td>
                     <td class="font-medium">${p.nombre}</td>
-                    <td>${p.stock}</td>
+                    <td class="${isLow ? 'font-semibold' : ''}" style="${isLow ? 'color:#fb7185' : ''}">
+                      ${p.stock}
+                      ${isLow ? `<span class="badge-neon text-[9px] px-1.5 py-0.5 ml-1 rounded-md align-middle" style="color:#fb7185;border-color:#fb718540;background:#fb718515;">Stock bajo</span>` : ''}
+                    </td>
+                    <td>
+                      <input type="number" min="0" value="${minVal}" class="input !py-1 !px-2 !w-20 text-xs" onchange="updateStockMin(${idx}, this.value)" />
+                    </td>
                     <td>${costoStr}</td>
                     <td class="font-semibold">${fmtUSD(precioUSD)}</td>
                     <td class="text-neon">${fmtBS(usdToBs(precioUSD))}</td>
@@ -979,9 +1010,10 @@ const VIEWS = {
           <div class="text-sm font-semibold">Cargar producto en ${t.name}</div>
           <div class="text-xs text-muted">Tasa BCV vigente: <span class="neon-text font-semibold">Bs ${STATE.bcv.toFixed(2)}</span></div>
         </div>
-        <form id="form-prod" class="grid grid-cols-1 md:grid-cols-6 gap-3 text-sm">
+        <form id="form-prod" class="grid grid-cols-1 md:grid-cols-7 gap-3 text-sm">
           <input class="input md:col-span-2" name="nombre" placeholder="Nombre del producto" required />
           <input class="input" name="stock" type="number" min="0" placeholder="Stock" required />
+          <input class="input" name="stockMin" type="number" min="0" placeholder="Stock mín." value="5" required />
           <input class="input" name="precio" id="prod-precio" type="number" step="0.01" min="0" placeholder="Precio USD" required />
           <input class="input bg-base/40" id="prod-precio-bs" type="text" placeholder="Equivalente BS (auto)" readonly />
           <button class="btn btn-primary">Agregar</button>
@@ -1003,11 +1035,13 @@ const VIEWS = {
         const fd = new FormData(e.target);
         const nombre = String(fd.get('nombre')).trim();
         const stock  = Number(fd.get('stock'));
+        const stockMinRaw = Number(fd.get('stockMin'));
+        const stockMin = Number.isFinite(stockMinRaw) && stockMinRaw >= 0 ? stockMinRaw : 5;
         const precioUSD = Number(fd.get('precio'));
         if (!nombre || precioUSD <= 0) { toast('Datos inválidos'); return; }
 
         const sku = 'P-' + Date.now().toString(36).toUpperCase().slice(-5);
-        const item = { sku, nombre, stock, moneda: 'USD', precioUSD, costoUSD: +(precioUSD * 0.6).toFixed(2) };
+        const item = { sku, nombre, stock, stockMin, moneda: 'USD', precioUSD, costoUSD: +(precioUSD * 0.6).toFixed(2) };
         tenant().inventario.unshift(item);
         tenant().productos.unshift({ nombre, precio: precioUSD });
         saveToStorage();
@@ -1131,7 +1165,7 @@ const VIEWS = {
         ${reportCard('Ventas mes (estim.)', fmtUSD(t.kpis.ventasUSD), '12 meses', '#00f2ff')}
         ${reportCard('Ventas POS reales', fmtUSD(ventasUSD), `${ventas.length} recibo(s)`, '#22d3ee')}
         ${reportCard('Egresos', fmtUSD(totalGastosUSD), 'Mes en curso', '#fb7185')}
-        ${reportCard('Valor inventario', fmtUSD(valorInvUSD), 'A costo', '#a78bfa')}
+        ${reportCard('Valor inventario', fmtUSD(valorInvUSD), `${fmtBS(usdToBs(valorInvUSD))} · BCV ${STATE.bcv.toFixed(2)}`, '#a78bfa')}
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-4">
@@ -2155,6 +2189,16 @@ function deleteProduct(idx) {
   tenant().productos = tenant().productos.filter(p => p.nombre !== removed.nombre);
   saveToStorage();
   toast('Producto eliminado');
+  render();
+}
+
+function updateStockMin(idx, value) {
+  const inv = tenant().inventario;
+  if (idx < 0 || idx >= inv.length) return;
+  const v = Number(value);
+  if (!Number.isFinite(v) || v < 0) { toast('Stock mínimo inválido'); render(); return; }
+  inv[idx].stockMin = v;
+  saveToStorage();
   render();
 }
 
