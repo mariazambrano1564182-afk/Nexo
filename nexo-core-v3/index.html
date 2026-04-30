@@ -187,6 +187,10 @@
     </div>
 
     <nav class="px-2 space-y-1 text-sm">
+      <button data-nav="adminDashboard" data-role="admin" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-muted">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2 3 7l9 5 9-5-9-5Z"/><path d="m3 17 9 5 9-5"/><path d="m3 12 9 5 9-5"/></svg>
+        Administración Global
+      </button>
       <button data-nav="dashboard" class="nav-item active w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-muted">
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="7" height="9"/><rect x="14" y="3" width="7" height="5"/><rect x="14" y="12" width="7" height="9"/><rect x="3" y="16" width="7" height="5"/></svg>
         Dashboard
@@ -269,6 +273,7 @@
       <!-- Mobile nav -->
       <div class="md:hidden px-3 pb-3 overflow-x-auto scroll-thin">
         <div class="flex gap-2 text-xs">
+          <button data-nav="adminDashboard" data-role="admin" class="nav-item px-3 py-1.5 rounded-lg text-muted">Admin Global</button>
           <button data-nav="dashboard" class="nav-item active px-3 py-1.5 rounded-lg text-muted">Dashboard</button>
           <button data-nav="pos" class="nav-item px-3 py-1.5 rounded-lg text-muted">POS</button>
           <button data-nav="inventario" class="nav-item px-3 py-1.5 rounded-lg text-muted">Inventario</button>
@@ -561,7 +566,7 @@ function render() {
   }
 
   $$('#tenant-switcher').forEach(s => {
-    s.value = STATE.view === 'adminDashboard' ? 'admin-global' : STATE.currentTenant;
+    s.value = STATE.currentTenant;
   });
   $$('.nav-item').forEach(b => {
     b.classList.toggle('active', b.dataset.nav === STATE.view);
@@ -2235,19 +2240,12 @@ document.addEventListener('change', e => {
   if (e.target && e.target.id === 'tenant-switcher') {
     if (!isAdmin()) { e.target.value = STATE.currentTenant; return; }
     const val = e.target.value;
-    if (val === 'admin-global') {
-      STATE.view = 'adminDashboard';
-      STATE.cart = [];
-      render();
-      toast('Vista: Administración Global');
-    } else {
-      STATE.currentTenant = val;
-      STATE.cart = [];
-      if (STATE.view === 'adminDashboard') STATE.view = 'dashboard';
-      saveToStorage();
-      toast(`Cambiado a: ${tenant().name}`);
-      render();
-    }
+    STATE.currentTenant = val;
+    STATE.cart = [];
+    if (STATE.view === 'adminDashboard') STATE.view = 'dashboard';
+    saveToStorage();
+    toast(`Cambiado a: ${tenant().name}`);
+    render();
   }
 });
 
@@ -2269,22 +2267,13 @@ function rebuildTenantSwitcher() {
   $$('#tenant-switcher').forEach(sel => {
     const prevVal = sel.value;
     sel.innerHTML = '';
-    if (isAdmin()) {
-      const adminOpt = document.createElement('option');
-      adminOpt.value = 'admin-global';
-      adminOpt.textContent = '⬡ ADMINISTRACIÓN GLOBAL';
-      adminOpt.style.color = '#00f2ff';
-      sel.appendChild(adminOpt);
-    }
     Object.entries(STATE.tenants).forEach(([k, t]) => {
       const opt = document.createElement('option');
       opt.value = k;
       opt.textContent = t.name;
       sel.appendChild(opt);
     });
-    if (prevVal === 'admin-global' && isAdmin()) {
-      sel.value = 'admin-global';
-    } else if (STATE.tenants[prevVal]) {
+    if (STATE.tenants[prevVal]) {
       sel.value = prevVal;
     } else {
       sel.value = STATE.currentTenant;
@@ -2354,7 +2343,7 @@ function applySessionToUI() {
     if (lockDisplay)  lockDisplay.classList.add('hidden');
     rebuildTenantSwitcher();
     $$('#tenant-switcher').forEach(sel => {
-      sel.value = STATE.view === 'adminDashboard' ? 'admin-global' : STATE.currentTenant;
+      sel.value = STATE.currentTenant;
     });
   } else {
     if (switcherWrap) switcherWrap.classList.add('hidden');
