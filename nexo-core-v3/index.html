@@ -720,12 +720,11 @@ const VIEWS = {
             <div class="text-[11px] uppercase tracking-widest text-muted">Comercios registrados</div>
             <div class="text-lg font-semibold">${tenantList.length} tenant(s)</div>
           </div>
-          <button class="btn btn-primary text-sm" onclick="openRegistroComercioModal()">+ Nuevo comercio</button>
         </div>
         <div class="table-scroll scroll-thin">
           <table>
             <thead>
-              <tr><th>Comercio</th><th>Tipo</th><th>Ciudad</th><th>Plan</th><th>Estado</th><th>Vencimiento</th><th>MRR</th><th></th></tr>
+              <tr><th>Comercio</th><th>Tipo</th><th>Ciudad</th><th>Plan</th><th>Estado</th><th>Vencimiento</th><th>MRR</th></tr>
             </thead>
             <tbody>
               ${tenantList.map(([k,t]) => {
@@ -742,9 +741,6 @@ const VIEWS = {
                     <td><span class="inline-flex items-center gap-1.5 text-xs" style="color:${statusColor}"><span class="pulse-dot" style="background:${statusColor};box-shadow:0 0 8px ${statusColor}${diff < 0 ? ';animation:none' : ''};"></span>${statusLabel}</span></td>
                     <td class="text-muted text-sm">${t.expiration_date}${diff <= 5 ? ` <span style="color:#fb923c;font-size:11px;">(${diff < 0 ? 'vencido' : diff + 'd'})</span>` : ''}</td>
                     <td class="font-semibold neon-text">${fmtUSD(PLAN_PRICES[t.plan_type])}</td>
-                    <td class="text-right">
-                      <button class="btn btn-ghost text-xs" onclick="STATE.currentTenant='${k}'; STATE.view='dashboard'; render(); toast('Viendo: ${t.name}');">Ver</button>
-                    </td>
                   </tr>
                 `;
               }).join('')}
@@ -834,22 +830,7 @@ const VIEWS = {
           </div>
         </div>
 
-        <div class="glass p-5">
-          <div class="text-sm font-semibold mb-3">Información del tenant</div>
-          <div class="grid grid-cols-2 gap-3 text-sm">
-            <div><div class="text-muted text-xs">Razón social</div><div class="font-medium">${t.name}</div></div>
-            <div><div class="text-muted text-xs">Tipo</div><div class="font-medium">${t.type}</div></div>
-            <div><div class="text-muted text-xs">Ciudad</div><div class="font-medium">${t.city}</div></div>
-            <div><div class="text-muted text-xs">Gerente</div><div class="font-medium">${t.manager}</div></div>
-            <div class="col-span-2 mt-2 glass p-3 flex items-center justify-between">
-              <div>
-                <div class="text-[11px] uppercase tracking-widest text-muted">Tasa BCV aplicada</div>
-                <div class="text-lg font-bold neon-text">Bs ${STATE.bcv.toFixed(2)} <span class="text-muted text-xs font-normal">/ USD</span></div>
-              </div>
-              <button class="btn btn-ghost text-xs" onclick="setView('configuracion')">Actualizar</button>
-            </div>
-          </div>
-        </div>
+        ${ventasPorMetodoChart(t)}
       </div>
     `;
     return wrap;
@@ -916,6 +897,15 @@ const VIEWS = {
                 <div class="text-[11px] text-muted">Vuelto / Cambio</div>
                 <div id="vuelto-val" class="text-base font-bold neon-text">—</div>
               </div>
+            </div>
+
+            <!-- Referencia bancaria (solo Pago Móvil) -->
+            <div id="pago-movil-row" class="hidden mt-2">
+              <label class="text-[11px] text-muted">Referencia bancaria (últimos 6 dígitos)</label>
+              <input id="pago-movil-ref" type="text" inputmode="numeric" pattern="\\d{6}" maxlength="6"
+                     class="input mt-0.5" placeholder="Ej: 482931"
+                     oninput="this.value=this.value.replace(/\\D/g,'').slice(0,6);" />
+              <div class="text-[10px] text-muted mt-1">Se requieren exactamente 6 dígitos numéricos.</div>
             </div>
           </div>
 
@@ -1458,9 +1448,14 @@ const VIEWS = {
                   <div class="flex items-center gap-2 mt-2 flex-wrap">
                     <span class="badge-neon text-[10px] px-2 py-1 rounded-md" style="color:${planColor[t.plan_type]};border-color:${planColor[t.plan_type]}40;background:${planColor[t.plan_type]}15;">${PLAN_LABELS[t.plan_type]}</span>
                     <span class="text-[11px]" style="${expClass}">Vence: ${t.expiration_date}</span>
+                    ${t.status === 'suspended' ? `<span class="badge-neon text-[10px] px-2 py-1 rounded-md" style="color:#fbbf24;border-color:#fbbf2440;background:#fbbf2415;">Suspendido</span>` : ''}
                   </div>
                 </div>
                 <button class="btn btn-ghost text-xs shrink-0" onclick="STATE.currentTenant='${k}'; render(); toast('Tenant activo: ${t.name}');">Activar</button>
+              </div>
+              <div class="flex gap-2 mt-3">
+                <button class="btn btn-ghost text-xs flex-1" onclick="toggleTenantSuspend('${k}')">${t.status === 'suspended' ? 'Reactivar' : 'Suspender'}</button>
+                <button class="btn btn-danger text-xs flex-1" onclick="deleteTenant('${k}')">Eliminar</button>
               </div>
             </div>
           `}).join('')}
@@ -1655,8 +1650,9 @@ function selectPago(metodo) {
   const bsRow    = document.getElementById('pago-bs-row');
   const mixRows  = document.getElementById('pago-mixto-rows');
   const vuelto   = document.getElementById('vuelto-display');
+  const movilRow = document.getElementById('pago-movil-row');
   if (!cashRow) return;
-  [usdRow, bsRow, mixRows, vuelto].forEach(el => el && el.classList.add('hidden'));
+  [usdRow, bsRow, mixRows, vuelto, movilRow].forEach(el => el && el.classList.add('hidden'));
   if (metodo === 'usd') {
     cashRow.classList.remove('hidden');
     usdRow.classList.remove('hidden');
@@ -1666,6 +1662,13 @@ function selectPago(metodo) {
   } else if (metodo === 'mixto') {
     cashRow.classList.remove('hidden');
     mixRows.classList.remove('hidden');
+  } else if (metodo === 'movil') {
+    cashRow.classList.add('hidden');
+    if (movilRow) {
+      movilRow.classList.remove('hidden');
+      const ref = document.getElementById('pago-movil-ref');
+      if (ref) { ref.value = ''; setTimeout(() => ref.focus(), 0); }
+    }
   } else {
     cashRow.classList.add('hidden');
   }
@@ -1719,13 +1722,30 @@ function calcVuelto() {
 function resetPago() {
   _pagoSeleccionado = null;
   document.querySelectorAll('.btn-pago').forEach(b => b.classList.remove('pago-active'));
-  const cashRow = document.getElementById('pago-cash-row');
-  if (cashRow) cashRow.classList.add('hidden');
+  const cashRow  = document.getElementById('pago-cash-row');
+  const movilRow = document.getElementById('pago-movil-row');
+  const refInput = document.getElementById('pago-movil-ref');
+  if (cashRow)  cashRow.classList.add('hidden');
+  if (movilRow) movilRow.classList.add('hidden');
+  if (refInput) refInput.value = '';
 }
 
 function checkoutWithPago() {
   if (!STATE.cart.length) { toast('El carrito está vacío'); return; }
   if (!_pagoSeleccionado) { toast('Seleccioná un método de pago'); return; }
+
+  let referenciaMovil = null;
+  if (_pagoSeleccionado === 'movil') {
+    const refInput = document.getElementById('pago-movil-ref');
+    const ref      = (refInput?.value || '').trim();
+    if (!/^\d{6}$/.test(ref)) {
+      toast('Ingresá los 6 últimos dígitos de la referencia bancaria');
+      refInput?.focus();
+      return;
+    }
+    referenciaMovil = ref;
+  }
+
   const totalUSD = STATE.cart.reduce((a,c) => a + c.precio * c.qty, 0);
   const inv = tenant().inventario;
   STATE.cart.forEach(c => {
@@ -1755,6 +1775,7 @@ function checkoutWithPago() {
     metodoPago: _pagoSeleccionado,
     metodoPagoLabel: metodosLabel[_pagoSeleccionado] || _pagoSeleccionado,
     vuelto: vueltoInfo,
+    referenciaMovil,
   };
   tenant().ventas = tenant().ventas || [];
   tenant().ventas.unshift(venta);
@@ -1768,6 +1789,39 @@ function checkoutWithPago() {
 /* =========================================================
    Usuarios — helpers
    ========================================================= */
+function toggleTenantSuspend(key) {
+  const t = STATE.tenants[key];
+  if (!t) return;
+  if (t.status === 'suspended') {
+    t.status = 'active';
+    saveToStorage();
+    toast(`Tenant "${t.name}" reactivado`);
+  } else {
+    if (!confirm(`¿Suspender el comercio "${t.name}"? No podrá operar hasta ser reactivado.`)) return;
+    t.status = 'suspended';
+    saveToStorage();
+    toast(`Tenant "${t.name}" suspendido`);
+  }
+  render();
+}
+
+function deleteTenant(key) {
+  const t = STATE.tenants[key];
+  if (!t) return;
+  const remaining = Object.keys(STATE.tenants).filter(k => k !== key);
+  if (remaining.length === 0) {
+    toast('No se puede eliminar: debe quedar al menos un comercio');
+    return;
+  }
+  if (!confirm(`¿Eliminar el comercio "${t.name}"? Se borrarán inventario, ventas y gastos. Esta acción es irreversible.`)) return;
+  delete STATE.tenants[key];
+  if (STATE.currentTenant === key) STATE.currentTenant = remaining[0];
+  saveToStorage();
+  rebuildTenantSwitcher();
+  toast(`Tenant "${t.name}" eliminado`);
+  render();
+}
+
 function deleteUser(idx) {
   if (!confirm(`¿Eliminar al usuario "${STATE.usuarios[idx]?.nombre}"?`)) return;
   STATE.usuarios.splice(idx, 1);
@@ -1924,6 +1978,7 @@ function openReceiptModal(venta) {
             ${venta.metodoPagoLabel ? `
             <div class="divider"></div>
             <div class="flex justify-between text-muted"><span>Método de pago</span><span class="font-semibold text-ink">${venta.metodoPagoLabel}</span></div>
+            ${venta.referenciaMovil ? `<div class="flex justify-between"><span class="text-muted">Ref. bancaria</span><span class="font-semibold text-ink">****${venta.referenciaMovil}</span></div>` : ''}
             ${venta.vuelto ? `<div class="flex justify-between"><span class="text-muted">${venta.vuelto.label}</span><span class="font-semibold neon-text">${venta.vuelto.valor}</span></div>` : ''}
             ` : ''}
           </div>
@@ -2149,6 +2204,58 @@ function reportCard(label, value, sub, color) {
       <div class="text-[11px] uppercase tracking-widest text-muted">${label}</div>
       <div class="text-2xl font-bold mt-1" style="color:${color}; text-shadow: 0 0 12px ${color}55;">${value}</div>
       <div class="text-xs text-muted mt-1">${sub}</div>
+    </div>
+  `;
+}
+
+function ventasPorMetodoChart(t) {
+  const ventas = Array.isArray(t.ventas) ? t.ventas : [];
+  const buckets = { usd: 0, bs: 0, movil: 0, punto: 0, mixto: 0 };
+  ventas.forEach(v => {
+    const m = v.metodoPago;
+    const key = (m === 'efectivo_usd') ? 'usd'
+              : (m === 'efectivo_bs') ? 'bs'
+              : (buckets.hasOwnProperty(m) ? m : null);
+    if (key) buckets[key] += Number(v.totalUSD) || 0;
+  });
+  const meta = [
+    { key:'usd',   label:'Efectivo USD', color:'#22d3ee' },
+    { key:'bs',    label:'Efectivo BS',  color:'#a78bfa' },
+    { key:'movil', label:'Pago Móvil',   color:'#34d399' },
+    { key:'punto', label:'Punto',        color:'#fbbf24' },
+    { key:'mixto', label:'Mixto',        color:'#fb7185' },
+  ];
+  const totalUSD = meta.reduce((a, m) => a + buckets[m.key], 0);
+  const max      = Math.max(1, ...meta.map(m => buckets[m.key]));
+
+  const rows = meta.map(m => {
+    const v   = buckets[m.key];
+    const w   = (v / max) * 100;
+    const pct = totalUSD > 0 ? (v / totalUSD) * 100 : 0;
+    return `
+      <div>
+        <div class="flex items-center justify-between text-xs mb-1">
+          <span class="text-muted">${m.label}</span>
+          <span class="font-semibold">${fmtUSD(v)} <span class="text-muted font-normal">· ${pct.toFixed(1)}%</span></span>
+        </div>
+        <div class="h-2 rounded-full bg-white/5 overflow-hidden">
+          <div style="width:${w}%; height:100%; background:linear-gradient(90deg, ${m.color}, ${m.color}55); box-shadow: 0 0 8px ${m.color}66;"></div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  return `
+    <div class="glass p-5">
+      <div class="flex items-center justify-between mb-3">
+        <div>
+          <div class="text-[11px] uppercase tracking-widest text-muted">Ventas por método de pago</div>
+          <div class="text-sm font-semibold">${fmtUSD(totalUSD)} <span class="text-muted text-xs font-normal">· ${ventas.length} venta(s)</span></div>
+        </div>
+      </div>
+      ${ventas.length === 0
+        ? `<div class="text-sm text-muted text-center py-6">Aún no hay ventas registradas en este comercio.</div>`
+        : `<div class="space-y-3">${rows}</div>`}
     </div>
   `;
 }
