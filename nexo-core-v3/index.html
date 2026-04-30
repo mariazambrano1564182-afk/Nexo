@@ -120,6 +120,57 @@
     width: 100%; max-width: 460px;
     max-height: 90vh; overflow: auto;
   }
+  /* Ticket / Factura SENIAT */
+  .ticket-wrap {
+    width: 100%; max-width: 360px;
+    max-height: 92vh; display: flex; flex-direction: column;
+    position: relative;
+  }
+  .ticket-close {
+    position: absolute; top: -10px; right: -10px;
+    width: 34px; height: 34px; border-radius: 999px;
+    background: #0f172a; color: #f8fafc;
+    border: 1px solid rgba(0,242,255,0.45);
+    box-shadow: 0 0 14px rgba(0,242,255,0.35);
+    font-size: 22px; line-height: 1; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+    cursor: pointer; z-index: 5;
+    transition: transform .15s, box-shadow .15s;
+  }
+  .ticket-close:hover {
+    transform: scale(1.08);
+    background: #fb7185; border-color: #fb7185;
+    box-shadow: 0 0 16px rgba(244,63,94,0.55);
+  }
+  .ticket-paper {
+    background: #f4ecd8;
+    color: #1a1a1a;
+    border-radius: 4px;
+    padding: 22px 18px;
+    overflow: auto; max-height: calc(92vh - 80px);
+    box-shadow: 0 12px 32px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,255,255,0.04);
+    background-image:
+      repeating-linear-gradient(0deg, rgba(0,0,0,0.02) 0 1px, transparent 1px 3px),
+      linear-gradient(180deg, #f7efdb, #ece2c6);
+  }
+  .ticket-body {
+    font-family: 'Courier New', ui-monospace, monospace;
+    font-size: 12.5px; line-height: 1.45; color: #1a1a1a;
+    letter-spacing: 0.2px;
+  }
+  .ticket-center { text-align: center; }
+  .ticket-strong { font-weight: 700; }
+  .ticket-row {
+    display: flex; justify-content: space-between; gap: 8px;
+    word-break: break-word;
+  }
+  .ticket-row > span:last-child { text-align: right; white-space: nowrap; }
+  .ticket-total { font-size: 15px; font-weight: 700; margin: 4px 0; }
+  .ticket-meta { color: #6b6b6b; font-size: 10.5px; margin-top: 6px; }
+  .ticket-dotted {
+    border-top: 1px dashed #6b6b6b;
+    margin: 8px 0;
+  }
   /* Print scope */
   @media print {
     body * { visibility: hidden !important; }
@@ -365,6 +416,9 @@ const STATE = {
       name: 'Ferretería El Centro',
       type: 'Ferretería',
       city: 'Caracas',
+      rif: 'J-31254896-0',
+      direccion: 'Av. Urdaneta, Esq. Animas, Local 12, Caracas, Distrito Capital',
+      zona_postal: '1010',
       manager: 'Luis Hernández',
       plan_type: 'advanced',
       status: 'active',
@@ -399,6 +453,9 @@ const STATE = {
       name: 'Farmacia Global',
       type: 'Farmacia',
       city: 'Valencia',
+      rif: 'J-40789652-1',
+      direccion: 'Av. Bolívar Norte, C.C. Sambil, Local 45, Valencia, Carabobo',
+      zona_postal: '2001',
       manager: 'María Rodríguez',
       plan_type: 'pro',
       status: 'active',
@@ -1823,12 +1880,7 @@ function checkoutWithPago() {
   }
 
   const totalUSD = STATE.cart.reduce((a,c) => a + c.precio * c.qty, 0);
-  const inv = tenant().inventario;
-  STATE.cart.forEach(c => {
-    const p = inv.find(x => x.nombre === c.nombre);
-    if (p && typeof p.stock === 'number') p.stock = Math.max(0, p.stock - c.qty);
-  });
-  const metodosLabel = { usd:'Efectivo USD', bs:'Efectivo BS', movil:'Pago Móvil', punto:'Punto de venta', mixto:'Pago mixto' };
+  const metodosLabel = { usd:'Efectivo USD', bs:'Efectivo BS', movil:'Pago Móvil', punto:'Tarjeta de Débito', mixto:'Pago mixto' };
 
   let vueltoInfo = null;
   if (_pagoSeleccionado === 'usd') {
@@ -1841,6 +1893,7 @@ function checkoutWithPago() {
 
   const venta = {
     id: 'V-' + Date.now().toString(36).toUpperCase(),
+    facturaNum: String(Date.now()).slice(-8).padStart(8, '0'),
     fecha: new Date().toISOString(),
     tenantKey: STATE.currentTenant,
     tenantName: tenant().name,
@@ -1852,14 +1905,47 @@ function checkoutWithPago() {
     metodoPagoLabel: metodosLabel[_pagoSeleccionado] || _pagoSeleccionado,
     vuelto: vueltoInfo,
     referenciaMovil,
+    _pending: true,
   };
-  tenant().ventas = tenant().ventas || [];
-  tenant().ventas.unshift(venta);
+  _pendingVenta = venta;
+  openReceiptModal(venta);
+}
+
+let _pendingVenta = null;
+
+function confirmReceiptSave() {
+  const venta = _pendingVenta;
+  if (!venta) { closeModal(); return; }
+
+  const t = STATE.tenants[venta.tenantKey];
+  if (!t) { toast('Tenant no encontrado'); return; }
+
+  // Descontar de inventario
+  const inv = t.inventario || [];
+  venta.items.forEach(it => {
+    const p = inv.find(x => x.nombre === it.nombre);
+    if (p && typeof p.stock === 'number') p.stock = Math.max(0, p.stock - it.qty);
+  });
+
+  // Registrar en reportes (histórico de ventas)
+  delete venta._pending;
+  t.ventas = t.ventas || [];
+  t.ventas.unshift(venta);
+
   saveToStorage();
+  _pendingVenta = null;
   STATE.cart = [];
   resetPago();
-  renderPOS();
-  openReceiptModal(venta);
+  closeModal();
+  toast(`Venta ${venta.id} guardada · inventario actualizado`);
+  render();
+}
+
+function discardPendingVenta() {
+  if (!_pendingVenta) { closeModal(); return; }
+  if (!confirm('¿Cerrar sin guardar? La venta no se registrará y el inventario no se descontará.')) return;
+  _pendingVenta = null;
+  closeModal();
 }
 
 /* =========================================================
@@ -2001,88 +2087,75 @@ function openNuevoUsuarioModal() {
 }
 
 /* =========================================================
-   Modal de Recibo
+   Modal de Recibo / Factura SENIAT
    ========================================================= */
 function openReceiptModal(venta) {
   const root = $('#modal-root');
+  const t = STATE.tenants[venta.tenantKey] || {};
   const fecha = new Date(venta.fecha);
-  const fechaStr = fecha.toLocaleDateString('es-VE') + ' · ' + fecha.toLocaleTimeString('es-VE', {hour:'2-digit', minute:'2-digit'});
+  const fechaStr = fecha.toLocaleDateString('es-VE');
+  const horaStr  = fecha.toLocaleTimeString('es-VE', {hour:'2-digit', minute:'2-digit', hour12:false});
+
+  const rif        = t.rif        || 'J-00000000-0';
+  const direccion  = t.direccion  || `${t.city || 'Caracas'}, Venezuela`;
+  const zonaPostal = t.zona_postal || '1010';
+  const cantidadItems = venta.items.reduce((a,it) => a + it.qty, 0);
+
+  // BI / IVA (16%) sobre total en BS
+  const totalBs = usdToBs(venta.totalUSD);
+  const baseBs  = totalBs / 1.16;
+  const ivaBs   = totalBs - baseBs;
+
+  const fmtBsLine = n => Number(n).toLocaleString('es-VE', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const dotted = `<div class="ticket-dotted"></div>`;
+
   root.innerHTML = `
     <div class="modal-backdrop" id="modal-backdrop">
-      <div class="glass-strong modal-card neon-border" id="print-area">
-        <div class="p-6">
-          <div class="flex items-start justify-between mb-4">
-            <div>
-              <div class="text-[10px] uppercase tracking-[0.25em] text-muted">Recibo de venta</div>
-              <div class="text-xl font-bold mt-0.5">${venta.tenantName}</div>
-              <div class="text-xs text-muted">Nexo Core V3 · ${fechaStr}</div>
-            </div>
-            <div class="text-right">
-              <div class="text-[10px] uppercase tracking-[0.2em] text-muted">N°</div>
-              <div class="font-mono text-sm neon-text">${venta.id}</div>
-            </div>
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="py-3">
-            <div class="grid grid-cols-12 text-[10px] uppercase tracking-widest text-muted mb-2">
-              <div class="col-span-6">Producto</div>
-              <div class="col-span-2 text-center">Cant.</div>
-              <div class="col-span-2 text-right">P.U.</div>
-              <div class="col-span-2 text-right">Subt.</div>
-            </div>
+      <div class="ticket-wrap" id="print-area">
+        <button class="ticket-close no-print" onclick="discardPendingVenta()" title="Cerrar sin guardar" aria-label="Cerrar">×</button>
+        <div class="ticket-paper">
+          <div class="ticket-body">
+            <div class="ticket-center">* SENIAT</div>
+            <div class="ticket-center">${rif.replace(/-/g,'')}</div>
+            <div class="ticket-center ticket-strong">${(t.name || 'COMERCIO').toUpperCase()}</div>
+            <div class="ticket-center">${direccion.toUpperCase()}</div>
+            <div class="ticket-center">ZONA POSTAL ${zonaPostal}</div>
+            <div class="ticket-row"><span>RAZON SOCIAL:CLIENTE GENERICO</span></div>
+            <div class="ticket-row"><span>CI/RIF:NO CI NO RIF</span></div>
+            <div class="ticket-row"><span>CAJA5/Cajera:POS</span><span class="ticket-strong">FACTURA</span></div>
+            <div class="ticket-row"><span class="ticket-strong">FACTURA</span><span>${venta.facturaNum || '00000000'}</span></div>
+            <div class="ticket-row"><span>FECHA:${fechaStr}</span><span>HORA:${horaStr}</span></div>
+            ${dotted}
             ${venta.items.map(it => {
-              const subt = it.precio * it.qty;
+              const precioBs = usdToBs(it.precio);
+              const subtBs   = precioBs * it.qty;
               return `
-              <div class="grid grid-cols-12 text-sm py-1.5">
-                <div class="col-span-6 truncate">${it.nombre}</div>
-                <div class="col-span-2 text-center">${it.qty}</div>
-                <div class="col-span-2 text-right">
-                  <div>${fmtUSD(it.precio)}</div>
-                  <div class="text-[10px] text-muted">${fmtBS(usdToBs(it.precio))}</div>
-                </div>
-                <div class="col-span-2 text-right">
-                  <div class="font-semibold">${fmtUSD(subt)}</div>
-                  <div class="text-[10px] text-muted">${fmtBS(usdToBs(subt))}</div>
-                </div>
-              </div>
-            `}).join('')}
+                <div class="ticket-row"><span>${it.qty} x Bs ${fmtBsLine(precioBs)}</span></div>
+                <div class="ticket-row"><span>${it.nombre.toUpperCase()}</span><span>Bs ${fmtBsLine(subtBs)}</span></div>
+              `;
+            }).join('')}
+            ${dotted}
+            <div class="ticket-row"><span>BI G(16,00%)</span><span>Bs ${fmtBsLine(baseBs)}</span></div>
+            <div class="ticket-row"><span>IVA G(16,00%)</span><span>Bs ${fmtBsLine(ivaBs)}</span></div>
+            ${dotted}
+            <div class="ticket-row ticket-total"><span>TOTAL</span><span>Bs ${fmtBsLine(totalBs)}</span></div>
+            <div class="ticket-row"><span>${venta.metodoPagoLabel || 'Pago'}</span><span>Bss ${fmtBsLine(totalBs)}</span></div>
+            ${venta.referenciaMovil ? `<div class="ticket-row"><span>Ref. bancaria</span><span>****${venta.referenciaMovil}</span></div>` : ''}
+            <div class="ticket-row"><span>CAMBIO</span><span>Bs 0,00</span></div>
+            <div class="ticket-row"><span>Cantidad:${cantidadItems}</span></div>
+            <div class="ticket-row"><span>MH</span></div>
+            <div class="ticket-row ticket-meta"><span>BCV ${venta.bcv.toFixed(2)} · ${fmtUSD(venta.totalUSD)}</span></div>
           </div>
-
-          <div class="divider"></div>
-
-          <div class="py-3 space-y-1.5 text-sm">
-            <div class="flex justify-between text-muted"><span>Tasa BCV aplicada</span><span>Bs ${venta.bcv.toFixed(2)} / USD</span></div>
-            <div class="flex justify-between"><span class="text-muted">Total USD</span><span class="font-semibold">${fmtUSD(venta.totalUSD)}</span></div>
-            <div class="flex justify-between items-end pt-1">
-              <span class="text-muted">Total BS</span>
-              <span class="text-2xl font-bold neon-text">${fmtBS(venta.totalBS)}</span>
-            </div>
-            ${venta.metodoPagoLabel ? `
-            <div class="divider"></div>
-            <div class="flex justify-between text-muted"><span>Método de pago</span><span class="font-semibold text-ink">${venta.metodoPagoLabel}</span></div>
-            ${venta.referenciaMovil ? `<div class="flex justify-between"><span class="text-muted">Ref. bancaria</span><span class="font-semibold text-ink">****${venta.referenciaMovil}</span></div>` : ''}
-            ${venta.vuelto ? `<div class="flex justify-between"><span class="text-muted">${venta.vuelto.label}</span><span class="font-semibold neon-text">${venta.vuelto.valor}</span></div>` : ''}
-            ` : ''}
-          </div>
-
-          <div class="divider"></div>
-
-          <div class="text-center text-[11px] text-muted py-3">
-            Gracias por su compra · Documento simulado · No fiscal
-          </div>
-
-          <div class="flex gap-2 no-print">
-            <button class="btn btn-ghost flex-1 text-sm" onclick="closeModal()">Cerrar</button>
-            <button class="btn btn-primary flex-1 text-sm" onclick="window.print()">Imprimir</button>
-          </div>
+        </div>
+        <div class="flex gap-2 mt-4 no-print">
+          <button class="btn btn-ghost flex-1 text-sm" onclick="window.print()">Imprimir</button>
+          <button class="btn btn-primary flex-1 text-sm" onclick="confirmReceiptSave()">Guardar</button>
         </div>
       </div>
     </div>
   `;
   $('#modal-backdrop').addEventListener('click', e => {
-    if (e.target.id === 'modal-backdrop') closeModal();
+    if (e.target.id === 'modal-backdrop') discardPendingVenta();
   });
 }
 
