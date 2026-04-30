@@ -238,13 +238,19 @@
           <h1 id="tenant-title" class="text-lg md:text-xl font-bold truncate">Ferretería El Centro</h1>
         </div>
 
-        <!-- TENANT SWITCHER (admin-only) -->
+        <!-- TENANT SWITCHER (superadmin-only) -->
         <div id="tenant-switcher-wrap" data-role="admin" class="glass px-2 py-1.5 flex items-center gap-2">
           <span class="hidden sm:block text-[10px] uppercase tracking-widest text-muted px-2">Tenant</span>
           <select id="tenant-switcher" class="select !py-1 !px-2 !w-auto text-sm">
             <option value="ferreteria">Ferretería El Centro</option>
             <option value="farmacia">Farmacia Global</option>
           </select>
+        </div>
+
+        <!-- TENANT LOCK (client / operador — solo su comercio) -->
+        <div id="tenant-lock-display" class="hidden glass px-3 py-1.5 flex items-center gap-2">
+          <svg class="w-3.5 h-3.5 text-muted shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <span id="tenant-lock-name" class="text-sm font-semibold text-ink truncate max-w-[140px]"></span>
         </div>
 
         <!-- USER MENU -->
@@ -517,14 +523,34 @@ function toast(msg) {
 function tenant() { return STATE.tenants[STATE.currentTenant]; }
 
 /* =========================================================
-   Render principal
+   tenantDataHook — Equivalente al hook useDashboardData
+   Determina qué datos traer según el rol y la vista activa.
+   Se ejecuta en cada ciclo de render antes de montar la UI.
    ========================================================= */
-function render() {
-  // Si hay sesión activa, aplicar permisos y forzar tenant antes de renderizar
-  if (typeof applySessionToUI === 'function' && STATE.session) {
-    applySessionToUI();
-  }
+function tenantDataHook() {
+  if (!STATE.session) return;
+  const s = STATE.session;
 
+  if (s.role === 'superadmin' && STATE.view === 'adminDashboard') {
+    // SuperAdmin en vista global: métricas de infraestructura + lista de tenants
+    // Los datos se leen directamente de STATE.tenants (sin filtro de tenant_id)
+    return { mode: 'GLOBAL', tenantId: null };
+  } else {
+    // Comercio: forzar tenant_id del usuario — ningún dato de otro comercio es visible
+    const tid = (s.role !== 'superadmin' && s.tenantKey) ? s.tenantKey : STATE.currentTenant;
+    STATE.currentTenant = tid;
+    return { mode: 'TENANT', tenantId: tid };
+  }
+}
+
+function render() {
+  // 1. Ejecutar el hook de datos: determina el contexto (GLOBAL vs TENANT)
+  const dataCtx = tenantDataHook();
+
+  // 2. Aplicar permisos, filtros de UI y protección de rutas
+  if (STATE.session) applySessionToUI();
+
+  // 3. Actualizar elementos del topbar
   const bcvEl = $('#bcv-side');
   if (bcvEl) bcvEl.textContent = STATE.bcv.toFixed(2);
 
@@ -541,6 +567,7 @@ function render() {
     b.classList.toggle('active', b.dataset.nav === STATE.view);
   });
 
+  // 4. Montar la vista correspondiente al contexto de datos
   const view = $('#view');
   view.innerHTML = '';
   const viewFn = VIEWS[STATE.view];
@@ -2143,11 +2170,48 @@ function barChart(data) {
    Eventos globales
    ========================================================= */
 function setView(v) {
-  // Bloqueo: no-admins no pueden navegar a vistas restringidas
-  if (!isAdmin() && (v === 'configuracion' || v === 'usuarios' || v === 'adminDashboard')) {
-    toast('No tenés permisos para acceder a esa sección');
+  const s = STATE.session;
+
+  // ── Middleware: Protección de rutas ───────────────────────────────────────
+
+  // 1. adminDashboard → SOLO superadmin. Cualquier otro intento → rebotar.
+  if (v === 'adminDashboard') {
+    if (!isAdmin()) {
+      toast('Acceso denegado — se requiere rol SuperAdmin');
+      STATE.view = 'dashboard';
+      render();
+      return;
+    }
+  }
+
+  // 2. usuarios / configuracion → solo superadmin
+  if ((v === 'usuarios' || v === 'configuracion') && !isAdmin()) {
+    toast('Sin permisos para acceder a esa sección');
     return;
   }
+
+  // 3. Operador: verificar contra su lista de vistas permitidas
+  if (s && s.role === 'operador' && s.vistas) {
+    const adminViews = ['usuarios', 'configuracion', 'adminDashboard'];
+    if (adminViews.includes(v)) {
+      toast('Acceso denegado');
+      return;
+    }
+    if (!s.vistas.includes(v)) {
+      toast(`Sin acceso a "${v.charAt(0).toUpperCase() + v.slice(1)}"`);
+      return;
+    }
+  }
+
+  // 4. Cliente sin vistas definidas: bloquear vistas admin-only
+  if (s && s.role === 'client') {
+    const adminViews = ['usuarios', 'configuracion', 'adminDashboard'];
+    if (adminViews.includes(v)) {
+      toast('Acceso denegado');
+      return;
+    }
+  }
+
   STATE.view = v;
   render();
 }
@@ -2193,11 +2257,13 @@ document.addEventListener('change', e => {
 const SESSION_KEY = 'nexo_core_v3_session';
 
 const USERS = {
-  'admin':      { pass: 'nexo2026',   role: 'admin',  name: 'Super Admin',          tenantKey: null },
-  'ferreteria': { pass: 'cliente123', role: 'client', name: 'Ferretería El Centro', tenantKey: 'ferreteria' }
+  'admin':      { pass: 'nexo2026',   role: 'superadmin', name: 'Super Admin',          tenantKey: null },
+  'ferreteria': { pass: 'cliente123', role: 'client',     name: 'Ferretería El Centro', tenantKey: 'ferreteria' }
 };
 
-function isAdmin() { return STATE.session && STATE.session.role === 'admin'; }
+function isAdmin()       { return STATE.session && STATE.session.role === 'superadmin'; }
+function isSuperAdmin()  { return isAdmin(); }
+function isClient()      { return STATE.session && (STATE.session.role === 'client' || STATE.session.role === 'operador'); }
 
 function rebuildTenantSwitcher() {
   $$('#tenant-switcher').forEach(sel => {
@@ -2230,41 +2296,91 @@ function applySessionToUI() {
   const s = STATE.session;
   if (!s) return;
 
-  // Bloquear/forzar tenant para clientes
-  if (s.role === 'client' && s.tenantKey) {
+  const isSA      = s.role === 'superadmin';
+  const isOp      = s.role === 'operador';
+  const isCl      = s.role === 'client';
+  const isRestricted = !isSA;  // client OR operador
+
+  // ── A. Forjar tenant_id: cliente/operador NUNCA puede salirse de su comercio ──
+  if (isRestricted && s.tenantKey) {
     STATE.currentTenant = s.tenantKey;
   }
 
-  // Mostrar / ocultar elementos según rol
-  const hideForClient = s.role !== 'admin';
-  document.querySelectorAll('[data-role="admin"]').forEach(el => {
-    el.classList.toggle('hidden', hideForClient);
-  });
-
-  // Si el cliente está parado en una vista restringida, mandarlo al dashboard
-  if (hideForClient && (STATE.view === 'configuracion' || STATE.view === 'usuarios' || STATE.view === 'adminDashboard')) {
+  // ── B. Protección de vista activa ─────────────────────────────────────────
+  //   Si el usuario llegó (por URL manual o código) a una vista prohibida,
+  //   redirigirlo al dashboard de su comercio.
+  const adminOnlyViews = ['configuracion', 'usuarios', 'adminDashboard'];
+  if (isRestricted && adminOnlyViews.includes(STATE.view)) {
     STATE.view = 'dashboard';
   }
+  // Operador: si la vista no está en su lista de vistas permitidas
+  if (isOp && s.vistas && !s.vistas.includes(STATE.view)) {
+    STATE.view = s.vistas[0] || 'dashboard';
+  }
 
-  // Reconstruir el tenant switcher (añade opción admin-global para superadmins)
-  rebuildTenantSwitcher();
-
-  // Ajustar el valor del selector según la vista actual
-  $$('#tenant-switcher').forEach(sel => {
-    sel.value = STATE.view === 'adminDashboard' ? 'admin-global' : STATE.currentTenant;
+  // ── C. Elementos con data-role="admin" → visibles solo para superadmin ────
+  document.querySelectorAll('[data-role="admin"]').forEach(el => {
+    el.classList.toggle('hidden', !isSA);
   });
 
-  // Avatar + datos
-  const avatar = document.getElementById('user-avatar');
-  const uname = document.getElementById('user-name');
-  const urole = document.getElementById('user-role');
-  const sidebarBadge = document.getElementById('sidebar-role-badge');
+  // ── D. Nav items para operadores (filtrar según vistas) ───────────────────
+  if (isOp && s.vistas) {
+    document.querySelectorAll('[data-nav]').forEach(btn => {
+      const v = btn.dataset.nav;
+      const adminViews = ['usuarios','configuracion','adminDashboard'];
+      if (adminViews.includes(v)) {
+        btn.classList.add('hidden');
+      } else {
+        btn.classList.toggle('hidden', !s.vistas.includes(v));
+      }
+    });
+  } else if (!isSA) {
+    // Client: ocultar solo las vistas explícitamente marcadas admin
+    document.querySelectorAll('[data-nav][data-role="admin"]').forEach(btn => {
+      btn.classList.add('hidden');
+    });
+  } else {
+    // SuperAdmin: mostrar todo
+    document.querySelectorAll('[data-nav]').forEach(btn => btn.classList.remove('hidden'));
+  }
+
+  // ── E. Tenant switcher (superadmin) vs. lock badge (cliente/operador) ─────
+  const switcherWrap = document.getElementById('tenant-switcher-wrap');
+  const lockDisplay  = document.getElementById('tenant-lock-display');
+  const lockName     = document.getElementById('tenant-lock-name');
+
+  if (isSA) {
+    if (switcherWrap) switcherWrap.classList.remove('hidden');
+    if (lockDisplay)  lockDisplay.classList.add('hidden');
+    rebuildTenantSwitcher();
+    $$('#tenant-switcher').forEach(sel => {
+      sel.value = STATE.view === 'adminDashboard' ? 'admin-global' : STATE.currentTenant;
+    });
+  } else {
+    if (switcherWrap) switcherWrap.classList.add('hidden');
+    if (lockDisplay && lockName) {
+      const tenantName = STATE.tenants[s.tenantKey]?.name || s.name;
+      lockName.textContent = tenantName;
+      lockDisplay.classList.remove('hidden');
+      lockDisplay.style.display = 'flex';
+    }
+  }
+
+  // ── F. Avatar + datos de usuario en topbar ────────────────────────────────
+  const avatar      = document.getElementById('user-avatar');
+  const uname       = document.getElementById('user-name');
+  const urole       = document.getElementById('user-role');
+  const sidebarBadge= document.getElementById('sidebar-role-badge');
+
   if (avatar) avatar.textContent = (s.name || s.user).slice(0,2).toUpperCase();
-  if (uname) uname.textContent = s.name || s.user;
-  if (urole) urole.textContent = s.role === 'admin' ? 'Super Admin' : 'Cliente';
+  if (uname)  uname.textContent  = s.name || s.user;
+  const roleLabel = isSA ? 'Super Admin' : (isOp ? 'Operador' : 'Cliente');
+  if (urole) urole.textContent = roleLabel;
   if (sidebarBadge) {
-    sidebarBadge.textContent = s.role === 'admin' ? 'Super Admin' : (STATE.tenants[s.tenantKey]?.name || s.name);
-    sidebarBadge.style.color = s.role === 'admin' ? '#00f2ff' : '';
+    sidebarBadge.textContent = isSA
+      ? 'Super Admin'
+      : (STATE.tenants[s.tenantKey]?.name || s.name);
+    sidebarBadge.style.color = isSA ? '#00f2ff' : '';
   }
 }
 
@@ -2290,15 +2406,60 @@ function hideLogin() {
 }
 
 function loginAttempt(user, pass) {
-  const u = USERS[user.trim().toLowerCase()];
-  if (!u || u.pass !== pass) return false;
-  STATE.session = {
-    user: user.trim().toLowerCase(),
-    role: u.role,
-    name: u.name,
-    tenantKey: u.tenantKey,
-    loggedAt: Date.now()
-  };
+  const usernameNorm = user.trim().toLowerCase();
+
+  // ── 1. Consultar credenciales estáticas (USERS) ──────────────────────────
+  const hardcodedUser = USERS[usernameNorm];
+
+  // ── 2. Si no está en USERS, consultar STATE.usuarios (dinámicos) ──────────
+  let dynamicRecord = null;
+  if (!hardcodedUser) {
+    dynamicRecord = STATE.usuarios.find(du => {
+      const uname = (du.username || du.email.split('@')[0]).toLowerCase();
+      return uname === usernameNorm && du.clave === pass;
+    });
+    if (!dynamicRecord) return false;
+  } else if (hardcodedUser.pass !== pass) {
+    return false;
+  }
+
+  // ── 3. Construir objeto de sesión ─────────────────────────────────────────
+  if (dynamicRecord) {
+    // Usuario operador creado dinámicamente
+    const assignedTenant = (dynamicRecord.comercio && dynamicRecord.comercio !== 'all')
+      ? dynamicRecord.comercio
+      : Object.keys(STATE.tenants)[0];
+    STATE.session = {
+      user: usernameNorm,
+      role: 'operador',
+      name: dynamicRecord.nombre,
+      tenantKey: assignedTenant,
+      vistas: dynamicRecord.vistas || ['dashboard'],
+      loggedAt: Date.now()
+    };
+  } else {
+    STATE.session = {
+      user: usernameNorm,
+      role: hardcodedUser.role,
+      name: hardcodedUser.name,
+      tenantKey: hardcodedUser.tenantKey,
+      vistas: null,   // null = acceso total (superadmin o client básico)
+      loggedAt: Date.now()
+    };
+  }
+
+  // ── 4. Determinar vista inicial y tenant según rol ────────────────────────
+  if (STATE.session.role === 'superadmin') {
+    // SuperAdmin: ir directo al dashboard de infraestructura
+    STATE.view = 'adminDashboard';
+    // tenant_id global = null (no aplica filtro por comercio)
+    STATE.currentTenant = Object.keys(STATE.tenants)[0];
+  } else {
+    // Cliente / Operador: ir al dashboard del propio comercio
+    STATE.view = 'dashboard';
+    STATE.currentTenant = STATE.session.tenantKey || Object.keys(STATE.tenants)[0];
+  }
+
   sessionStorage.setItem(SESSION_KEY, JSON.stringify(STATE.session));
   return true;
 }
