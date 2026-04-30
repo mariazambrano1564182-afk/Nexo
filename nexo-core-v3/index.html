@@ -90,6 +90,7 @@
   .btn-primary { background: #00f2ff; color: #020617; box-shadow: 0 0 14px rgba(0,242,255,0.45); }
   .btn-primary:hover { transform: translateY(-1px); box-shadow: 0 0 22px rgba(0,242,255,0.65); }
   .btn-ghost { background: rgba(255,255,255,0.04); color: #f8fafc; border: 1px solid rgba(148,163,184,0.18); }
+  .btn-pago.pago-active { background: rgba(0,242,255,0.14); border-color: #00f2ff; color: #00f2ff; box-shadow: 0 0 8px rgba(0,242,255,0.25); }
   .btn-ghost:hover { background: rgba(255,255,255,0.08); }
   .btn-danger {
     background: rgba(244,63,94,0.10);
@@ -747,10 +748,12 @@ const VIEWS = {
               <div class="text-[11px] text-muted pb-1">Bs / USD</div>
             </div>
           </div>
-          <button onclick="logout()" class="btn btn-danger w-full mt-3 flex items-center justify-center gap-2 text-xs">
-            <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>
-            Salir del sistema
-          </button>
+          <div class="mt-3 space-y-1.5 text-xs text-muted">
+            <div class="flex justify-between"><span>$1 USD =</span><span class="font-semibold text-ink">${fmtBS(STATE.bcv)}</span></div>
+            <div class="flex justify-between"><span>$10 USD =</span><span class="font-semibold text-ink">${fmtBS(STATE.bcv * 10)}</span></div>
+            <div class="flex justify-between"><span>$100 USD =</span><span class="font-semibold text-ink">${fmtBS(STATE.bcv * 100)}</span></div>
+          </div>
+          <button class="btn btn-ghost w-full mt-3 text-xs" onclick="setView('configuracion')">Actualizar tasa BCV</button>
         </div>
       </div>
 
@@ -838,16 +841,55 @@ const VIEWS = {
 
         <div class="glass p-5 flex flex-col">
           <div class="text-sm font-semibold mb-3">Carrito</div>
-          <div id="cart-list" class="flex-1 space-y-2 overflow-auto scroll-thin max-h-[420px] pr-1"></div>
+          <div id="cart-list" class="flex-1 space-y-2 overflow-auto scroll-thin max-h-[260px] pr-1"></div>
           <div class="divider my-3"></div>
-          <div class="space-y-2 text-sm">
+          <div class="space-y-1.5 text-sm">
             <div class="flex justify-between"><span class="text-muted">Subtotal USD</span><span id="cart-usd" class="font-semibold">$0.00</span></div>
             <div class="flex justify-between"><span class="text-muted">Equivalente BS</span><span id="cart-bs" class="font-semibold">Bs 0.00</span></div>
             <div class="flex justify-between text-xs text-muted"><span>Tasa BCV</span><span>Bs ${STATE.bcv.toFixed(2)}</span></div>
           </div>
-          <div class="flex gap-2 mt-4">
-            <button class="btn btn-ghost flex-1 text-sm" onclick="STATE.cart=[]; renderPOS();">Vaciar</button>
-            <button class="btn btn-primary flex-1 text-sm" onclick="checkout()">Cobrar</button>
+
+          <!-- Métodos de pago -->
+          <div class="mt-3">
+            <div class="text-[11px] uppercase tracking-widest text-muted mb-2">Método de pago</div>
+            <div class="grid grid-cols-3 gap-1.5 mb-2">
+              ${[
+                { val:'usd',    label:'Efvo USD' },
+                { val:'bs',     label:'Efvo BS'  },
+                { val:'movil',  label:'P.Móvil'  },
+                { val:'punto',  label:'Punto'    },
+                { val:'mixto',  label:'Mixto'    },
+              ].map(m => `
+                <button data-pago="${m.val}" class="btn-pago btn btn-ghost text-[11px] !py-1.5 !px-1" onclick="selectPago('${m.val}')">${m.label}</button>
+              `).join('')}
+            </div>
+
+            <!-- Monto entregado (solo efectivo/mixto) -->
+            <div id="pago-cash-row" class="hidden space-y-1.5">
+              <div id="pago-usd-row" class="hidden">
+                <label class="text-[11px] text-muted">Billete / Monto entregado (USD)</label>
+                <input id="pago-billete-usd" type="number" step="0.01" min="0" class="input mt-0.5" placeholder="Ej: 20" oninput="calcVuelto()" />
+              </div>
+              <div id="pago-bs-row" class="hidden">
+                <label class="text-[11px] text-muted">Billete / Monto entregado (BS)</label>
+                <input id="pago-billete-bs" type="number" step="0.01" min="0" class="input mt-0.5" placeholder="Ej: 500" oninput="calcVuelto()" />
+              </div>
+              <div id="pago-mixto-rows" class="hidden space-y-1">
+                <div class="grid grid-cols-2 gap-1.5">
+                  <div><label class="text-[11px] text-muted">USD</label><input id="pago-mix-usd" type="number" step="0.01" min="0" class="input mt-0.5" placeholder="0" oninput="calcVuelto()" /></div>
+                  <div><label class="text-[11px] text-muted">BS</label><input id="pago-mix-bs" type="number" step="0.01" min="0" class="input mt-0.5" placeholder="0" oninput="calcVuelto()" /></div>
+                </div>
+              </div>
+              <div id="vuelto-display" class="hidden glass !rounded-lg px-3 py-2 mt-1">
+                <div class="text-[11px] text-muted">Vuelto / Cambio</div>
+                <div id="vuelto-val" class="text-base font-bold neon-text">—</div>
+              </div>
+            </div>
+          </div>
+
+          <div class="flex gap-2 mt-3">
+            <button class="btn btn-ghost flex-1 text-sm" onclick="STATE.cart=[]; resetPago(); renderPOS();">Vaciar</button>
+            <button class="btn btn-primary flex-1 text-sm" onclick="checkoutWithPago()">Cobrar</button>
           </div>
         </div>
       </div>
@@ -1167,40 +1209,139 @@ const VIEWS = {
 
   usuarios() {
     const wrap = document.createElement('div');
+    const allViews = ['dashboard','pos','inventario','gastos','reportes'];
+
     wrap.innerHTML = `
+      <!-- Header -->
       <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
         <div>
           <div class="text-[11px] uppercase tracking-widest text-muted">Gestión de usuarios</div>
           <h2 class="text-xl font-semibold">Acceso por comercio</h2>
         </div>
-        <button class="btn btn-primary text-sm" onclick="toast('Modal de invitación (simulado)')">+ Invitar usuario</button>
+        <button class="btn btn-primary text-sm" onclick="openNuevoUsuarioModal()">+ Nuevo usuario</button>
       </div>
 
+      <!-- Tabla usuarios -->
       <div class="glass mt-4 overflow-hidden">
         <div class="overflow-x-auto scroll-thin">
           <table>
             <thead>
-              <tr><th>Usuario</th><th>Email</th><th>Rol</th><th>Comercio</th><th>Estado</th><th></th></tr>
+              <tr><th>Usuario</th><th>Login</th><th>Rol</th><th>Comercio</th><th>Vistas</th><th>Estado</th><th></th></tr>
             </thead>
             <tbody>
-              ${STATE.usuarios.map(u => `
+              ${STATE.usuarios.map((u, idx) => `
                 <tr>
-                  <td class="font-medium flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-neon/30 to-indigo-500/30 border border-line/40 flex items-center justify-center text-xs font-bold">${u.nombre.split(' ').map(s=>s[0]).slice(0,2).join('')}</div>
-                    ${u.nombre}
+                  <td>
+                    <div class="flex items-center gap-3">
+                      <div class="w-8 h-8 rounded-full bg-gradient-to-br from-neon/30 to-indigo-500/30 border border-line/40 flex items-center justify-center text-xs font-bold shrink-0">${u.nombre.split(' ').map(s=>s[0]).slice(0,2).join('')}</div>
+                      <div>
+                        <div class="font-medium text-sm">${u.nombre}</div>
+                        <div class="text-[11px] text-muted">${u.email}</div>
+                      </div>
+                    </div>
                   </td>
-                  <td class="text-muted">${u.email}</td>
+                  <td class="font-mono text-xs text-muted">${u.username || u.email.split('@')[0]}</td>
                   <td><span class="badge-neon text-[10px] px-2 py-1 rounded-md">${u.rol}</span></td>
-                  <td>${u.comercio === 'all' ? '<span class="text-muted">Todos</span>' : STATE.tenants[u.comercio].name}</td>
+                  <td class="text-sm">${u.comercio === 'all' ? '<span class="text-muted">Todos</span>' : (STATE.tenants[u.comercio]?.name || u.comercio)}</td>
+                  <td class="text-xs text-muted">${(u.vistas || allViews).map(v => v.charAt(0).toUpperCase() + v.slice(1)).join(', ')}</td>
                   <td><span class="inline-flex items-center gap-2 text-xs"><span class="pulse-dot"></span>${u.estado}</span></td>
-                  <td class="text-right"><button class="btn btn-ghost text-xs">Editar</button></td>
+                  <td class="text-right">
+                    <button class="btn btn-danger text-xs" onclick="deleteUser(${idx})">Eliminar</button>
+                  </td>
                 </tr>
               `).join('')}
             </tbody>
           </table>
         </div>
       </div>
+
+      <!-- Registro de Comercio -->
+      <div class="glass mt-6 p-5">
+        <div class="text-sm font-semibold mb-1">Registrar nuevo comercio</div>
+        <p class="text-xs text-muted mb-4">Al guardar, se asigna el plan seleccionado y la fecha de vencimiento se establece automáticamente a 30 días.</p>
+
+        <div class="text-[11px] uppercase tracking-widest text-muted mb-2">Seleccionar plan</div>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4" id="plan-cards">
+          ${['basic','advanced','pro'].map((plan, idx) => `
+            <label class="cursor-pointer">
+              <input type="radio" name="reg-plan" value="${plan}" class="sr-only" ${idx === 1 ? 'checked' : ''} />
+              <div class="glass p-4 rounded-xl border transition plan-card ${idx === 1 ? 'plan-card-selected' : ''}" data-plan="${plan}"
+                   style="border-color:${idx===1?({basic:'#22d3ee',advanced:'#a78bfa',pro:'#00f2ff'}[plan]):'rgba(148,163,184,0.15)'};">
+                <div class="flex items-center justify-between mb-2">
+                  <span class="text-xs font-bold uppercase tracking-widest" style="color:${{basic:'#22d3ee',advanced:'#a78bfa',pro:'#00f2ff'}[plan]}">${PLAN_LABELS[plan]}</span>
+                  <span class="text-sm font-bold neon-text">${{basic:'$29',advanced:'$59',pro:'$99'}[plan]}<span class="text-muted text-[10px] font-normal">/mes</span></span>
+                </div>
+                <div class="text-[11px] text-muted">${PLAN_DESC[plan]}</div>
+              </div>
+            </label>
+          `).join('')}
+        </div>
+
+        <form id="form-registro-comercio" class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+          <input class="input" name="nombre"    placeholder="Nombre del comercio"           required />
+          <input class="input" name="tipo"      placeholder="Tipo (Ferretería, Farmacia…)"  required />
+          <input class="input" name="rif"       placeholder="RIF (Ej: J-12345678-9)"        required />
+          <input class="input" name="ciudad"    placeholder="Ciudad"                        required />
+          <input class="input md:col-span-2" name="direccion" placeholder="Dirección completa del comercio" required />
+          <input class="input" name="gerente"   placeholder="Nombre del gerente"            required />
+          <button class="btn btn-primary md:col-span-2">Registrar comercio</button>
+        </form>
+      </div>
     `;
+
+    setTimeout(() => {
+      // Plan card selection
+      const PLAN_ACCENT = { basic: '#22d3ee', advanced: '#a78bfa', pro: '#00f2ff' };
+      document.querySelectorAll('input[name="reg-plan"]').forEach(radio => {
+        radio.addEventListener('change', () => {
+          document.querySelectorAll('.plan-card').forEach(card => {
+            const plan = card.dataset.plan;
+            const isSel = plan === radio.value;
+            card.style.borderColor = isSel ? PLAN_ACCENT[plan] : 'rgba(148,163,184,0.15)';
+            card.style.background  = isSel ? `linear-gradient(180deg,${PLAN_ACCENT[plan]}14,${PLAN_ACCENT[plan]}08)` : '';
+          });
+        });
+      });
+
+      // Comercio registration form
+      const formReg = $('#form-registro-comercio');
+      if (formReg) {
+        formReg.addEventListener('submit', e => {
+          e.preventDefault();
+          const fd       = new FormData(e.target);
+          const nombre   = String(fd.get('nombre')).trim();
+          const tipo     = String(fd.get('tipo')).trim();
+          const rif      = String(fd.get('rif')).trim();
+          const ciudad   = String(fd.get('ciudad')).trim();
+          const direccion= String(fd.get('direccion')).trim();
+          const gerente  = String(fd.get('gerente')).trim();
+          const planSel  = document.querySelector('input[name="reg-plan"]:checked');
+          const planType = planSel ? planSel.value : 'basic';
+
+          if (!nombre || !tipo || !ciudad || !gerente || !rif || !direccion) { toast('Completá todos los campos'); return; }
+
+          const expDate = new Date();
+          expDate.setDate(expDate.getDate() + 30);
+          const expStr = expDate.toISOString().slice(0, 10);
+
+          const key = nombre.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'').slice(0,20) + '_' + Date.now().toString(36);
+          STATE.tenants[key] = {
+            _dynamic: true,
+            name: nombre, type: tipo, city: ciudad, manager: gerente,
+            rif, direccion,
+            plan_type: planType, status: 'active', expiration_date: expStr,
+            kpis: { ventasUSD: 0, ticketProm: 0, productos: 0, clientes: 0 },
+            inventario: [], gastos: [], ventasMes: Array(12).fill(0), productos: [], ventas: [],
+          };
+          rebuildTenantSwitcher();
+          saveToStorage();
+          toast(`"${nombre}" registrado · Plan ${PLAN_LABELS[planType]} · Vence ${expStr}`);
+          e.target.reset();
+          render();
+        });
+      }
+    }, 0);
+
     return wrap;
   },
 
@@ -1292,38 +1433,6 @@ const VIEWS = {
             </div>
           `}).join('')}
         </div>
-      </div>
-
-      <!-- Registro de Comercio con Plan -->
-      <div class="glass mt-4 p-5">
-        <div class="text-sm font-semibold mb-1">Registrar nuevo comercio</div>
-        <p class="text-xs text-muted mb-4">Al guardar, se asigna el plan seleccionado y la fecha de vencimiento se establece automáticamente a 30 días.</p>
-
-        <!-- Plan Radio Cards -->
-        <div class="text-[11px] uppercase tracking-widest text-muted mb-2">Seleccionar plan</div>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4" id="plan-cards">
-          ${['basic','advanced','pro'].map((plan, idx) => `
-            <label class="cursor-pointer">
-              <input type="radio" name="reg-plan" value="${plan}" class="sr-only" ${idx === 1 ? 'checked' : ''} />
-              <div class="glass p-4 rounded-xl border transition plan-card ${idx === 1 ? 'plan-card-selected' : ''}" data-plan="${plan}"
-                   style="border-color:${idx===1?({ basic:'#22d3ee', advanced:'#a78bfa', pro:'#00f2ff' }[plan]):'rgba(148,163,184,0.15)'};">
-                <div class="flex items-center justify-between mb-2">
-                  <span class="text-xs font-bold uppercase tracking-widest" style="color:${{ basic:'#22d3ee', advanced:'#a78bfa', pro:'#00f2ff' }[plan]}">${PLAN_LABELS[plan]}</span>
-                  <span class="text-sm font-bold neon-text">${ { basic:'$29', advanced:'$59', pro:'$99' }[plan] }<span class="text-muted text-[10px] font-normal">/mes</span></span>
-                </div>
-                <div class="text-[11px] text-muted">${PLAN_DESC[plan]}</div>
-              </div>
-            </label>
-          `).join('')}
-        </div>
-
-        <form id="form-registro-comercio" class="grid grid-cols-1 md:grid-cols-3 gap-3 text-sm">
-          <input class="input md:col-span-2" name="nombre" placeholder="Nombre del comercio" required />
-          <input class="input" name="tipo" placeholder="Tipo (Ferretería, Farmacia…)" required />
-          <input class="input" name="ciudad" placeholder="Ciudad" required />
-          <input class="input" name="gerente" placeholder="Nombre del gerente" required />
-          <button class="btn btn-primary">Registrar comercio</button>
-        </form>
       </div>
 
       <div class="glass mt-4 p-5 flex flex-col md:flex-row md:items-center md:justify-between gap-3">
@@ -1475,13 +1584,11 @@ function changeQty(i, d) {
 function checkout() {
   if (!STATE.cart.length) { toast('El carrito está vacío'); return; }
   const totalUSD = STATE.cart.reduce((a,c) => a + c.precio * c.qty, 0);
-  // Descuento de stock si el producto existe en el inventario
   const inv = tenant().inventario;
   STATE.cart.forEach(c => {
     const p = inv.find(x => x.nombre === c.nombre);
     if (p && typeof p.stock === 'number') p.stock = Math.max(0, p.stock - c.qty);
   });
-  // Persistir venta en histórico
   const venta = {
     id: 'V-' + Date.now().toString(36).toUpperCase(),
     fecha: new Date().toISOString(),
@@ -1491,6 +1598,7 @@ function checkout() {
     totalUSD,
     bcv: STATE.bcv,
     totalBS: usdToBs(totalUSD),
+    metodoPago: 'efectivo_usd',
   };
   tenant().ventas = tenant().ventas || [];
   tenant().ventas.unshift(venta);
@@ -1498,6 +1606,236 @@ function checkout() {
   STATE.cart = [];
   renderPOS();
   openReceiptModal(venta);
+}
+
+/* =========================================================
+   POS — Métodos de pago / Vuelto
+   ========================================================= */
+let _pagoSeleccionado = null;
+
+function selectPago(metodo) {
+  _pagoSeleccionado = metodo;
+  document.querySelectorAll('.btn-pago').forEach(b => {
+    b.classList.toggle('pago-active', b.dataset.pago === metodo);
+  });
+  const cashRow  = document.getElementById('pago-cash-row');
+  const usdRow   = document.getElementById('pago-usd-row');
+  const bsRow    = document.getElementById('pago-bs-row');
+  const mixRows  = document.getElementById('pago-mixto-rows');
+  const vuelto   = document.getElementById('vuelto-display');
+  if (!cashRow) return;
+  [usdRow, bsRow, mixRows, vuelto].forEach(el => el && el.classList.add('hidden'));
+  if (metodo === 'usd') {
+    cashRow.classList.remove('hidden');
+    usdRow.classList.remove('hidden');
+  } else if (metodo === 'bs') {
+    cashRow.classList.remove('hidden');
+    bsRow.classList.remove('hidden');
+  } else if (metodo === 'mixto') {
+    cashRow.classList.remove('hidden');
+    mixRows.classList.remove('hidden');
+  } else {
+    cashRow.classList.add('hidden');
+  }
+  calcVuelto();
+}
+
+function calcVuelto() {
+  const totalUSD = STATE.cart.reduce((a,c) => a + c.precio * c.qty, 0);
+  const totalBS  = usdToBs(totalUSD);
+  const vueltoBox = document.getElementById('vuelto-display');
+  const vueltoVal = document.getElementById('vuelto-val');
+  if (!vueltoBox || !vueltoVal) return;
+
+  let vueltoStr = null;
+  if (_pagoSeleccionado === 'usd') {
+    const billete = Number(document.getElementById('pago-billete-usd')?.value || 0);
+    if (billete > 0) {
+      const cambio = billete - totalUSD;
+      vueltoStr = cambio >= 0
+        ? `${fmtUSD(cambio)} (${fmtBS(usdToBs(cambio))})`
+        : `<span style="color:#fb7185">Faltan ${fmtUSD(Math.abs(cambio))}</span>`;
+    }
+  } else if (_pagoSeleccionado === 'bs') {
+    const billete = Number(document.getElementById('pago-billete-bs')?.value || 0);
+    if (billete > 0) {
+      const cambio = billete - totalBS;
+      vueltoStr = cambio >= 0
+        ? `${fmtBS(cambio)} (${fmtUSD(bsToUsd(cambio))})`
+        : `<span style="color:#fb7185">Faltan ${fmtBS(Math.abs(cambio))}</span>`;
+    }
+  } else if (_pagoSeleccionado === 'mixto') {
+    const mixUSD = Number(document.getElementById('pago-mix-usd')?.value || 0);
+    const mixBS  = Number(document.getElementById('pago-mix-bs')?.value  || 0);
+    const totalPagado = mixUSD + bsToUsd(mixBS);
+    if (mixUSD > 0 || mixBS > 0) {
+      const cambio = totalPagado - totalUSD;
+      vueltoStr = cambio >= 0
+        ? `${fmtUSD(cambio)}`
+        : `<span style="color:#fb7185">Faltan ${fmtUSD(Math.abs(cambio))}</span>`;
+    }
+  }
+
+  if (vueltoStr !== null) {
+    vueltoBox.classList.remove('hidden');
+    vueltoVal.innerHTML = vueltoStr;
+  } else {
+    vueltoBox.classList.add('hidden');
+  }
+}
+
+function resetPago() {
+  _pagoSeleccionado = null;
+  document.querySelectorAll('.btn-pago').forEach(b => b.classList.remove('pago-active'));
+  const cashRow = document.getElementById('pago-cash-row');
+  if (cashRow) cashRow.classList.add('hidden');
+}
+
+function checkoutWithPago() {
+  if (!STATE.cart.length) { toast('El carrito está vacío'); return; }
+  if (!_pagoSeleccionado) { toast('Seleccioná un método de pago'); return; }
+  const totalUSD = STATE.cart.reduce((a,c) => a + c.precio * c.qty, 0);
+  const inv = tenant().inventario;
+  STATE.cart.forEach(c => {
+    const p = inv.find(x => x.nombre === c.nombre);
+    if (p && typeof p.stock === 'number') p.stock = Math.max(0, p.stock - c.qty);
+  });
+  const metodosLabel = { usd:'Efectivo USD', bs:'Efectivo BS', movil:'Pago Móvil', punto:'Punto de venta', mixto:'Pago mixto' };
+
+  let vueltoInfo = null;
+  if (_pagoSeleccionado === 'usd') {
+    const billete = Number(document.getElementById('pago-billete-usd')?.value || 0);
+    if (billete > 0) vueltoInfo = { label: 'Vuelto', valor: fmtUSD(Math.max(0, billete - totalUSD)) };
+  } else if (_pagoSeleccionado === 'bs') {
+    const billete = Number(document.getElementById('pago-billete-bs')?.value || 0);
+    if (billete > 0) vueltoInfo = { label: 'Vuelto', valor: fmtBS(Math.max(0, billete - usdToBs(totalUSD))) };
+  }
+
+  const venta = {
+    id: 'V-' + Date.now().toString(36).toUpperCase(),
+    fecha: new Date().toISOString(),
+    tenantKey: STATE.currentTenant,
+    tenantName: tenant().name,
+    items: STATE.cart.map(c => ({ nombre: c.nombre, qty: c.qty, precio: c.precio })),
+    totalUSD,
+    bcv: STATE.bcv,
+    totalBS: usdToBs(totalUSD),
+    metodoPago: _pagoSeleccionado,
+    metodoPagoLabel: metodosLabel[_pagoSeleccionado] || _pagoSeleccionado,
+    vuelto: vueltoInfo,
+  };
+  tenant().ventas = tenant().ventas || [];
+  tenant().ventas.unshift(venta);
+  saveToStorage();
+  STATE.cart = [];
+  resetPago();
+  renderPOS();
+  openReceiptModal(venta);
+}
+
+/* =========================================================
+   Usuarios — helpers
+   ========================================================= */
+function deleteUser(idx) {
+  if (!confirm(`¿Eliminar al usuario "${STATE.usuarios[idx]?.nombre}"?`)) return;
+  STATE.usuarios.splice(idx, 1);
+  saveToStorage();
+  toast('Usuario eliminado');
+  render();
+}
+
+function openNuevoUsuarioModal() {
+  const allViews = ['dashboard','pos','inventario','gastos','reportes','usuarios','configuracion'];
+  const tenantOptions = Object.entries(STATE.tenants)
+    .map(([k,t]) => `<option value="${k}">${t.name}</option>`)
+    .join('');
+  const root = document.getElementById('modal-root');
+  root.innerHTML = `
+    <div class="modal-backdrop" id="modal-backdrop">
+      <div class="glass-strong modal-card neon-border" style="max-width:540px;">
+        <div class="p-6">
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <div class="text-[10px] uppercase tracking-[0.25em] text-muted">Nuevo usuario</div>
+              <div class="text-lg font-bold">Crear acceso al sistema</div>
+            </div>
+            <button class="btn btn-ghost !p-1.5" onclick="closeModal()">✕</button>
+          </div>
+
+          <form id="form-nuevo-usuario" class="space-y-3 text-sm">
+            <div class="grid grid-cols-2 gap-3">
+              <div class="col-span-2">
+                <label class="text-[11px] text-muted uppercase tracking-widest">Nombre completo</label>
+                <input class="input mt-1 w-full" name="nombre" placeholder="Ej: María Pérez" required />
+              </div>
+              <div>
+                <label class="text-[11px] text-muted uppercase tracking-widest">Usuario (login)</label>
+                <input class="input mt-1 w-full" name="username" placeholder="mperez" required />
+              </div>
+              <div>
+                <label class="text-[11px] text-muted uppercase tracking-widest">Contraseña</label>
+                <input class="input mt-1 w-full" name="clave" type="password" placeholder="••••••••" required />
+              </div>
+            </div>
+
+            <div>
+              <label class="text-[11px] text-muted uppercase tracking-widest">Comercio asignado</label>
+              <select class="select mt-1 w-full" name="comercio">
+                <option value="all">Todos los comercios</option>
+                ${tenantOptions}
+              </select>
+            </div>
+
+            <div>
+              <label class="text-[11px] text-muted uppercase tracking-widest block mb-2">Vistas permitidas</label>
+              <div class="grid grid-cols-2 gap-2">
+                ${allViews.map(v => `
+                  <label class="flex items-center gap-2 cursor-pointer glass px-3 py-2 rounded-lg hover:bg-white/5">
+                    <input type="checkbox" name="vistas" value="${v}" class="accent-cyan-400"
+                           ${['dashboard','pos','inventario'].includes(v) ? 'checked' : ''} />
+                    <span class="text-xs">${v.charAt(0).toUpperCase()+v.slice(1)}</span>
+                  </label>
+                `).join('')}
+              </div>
+            </div>
+
+            <div class="flex gap-2 mt-4 pt-2">
+              <button type="button" class="btn btn-ghost flex-1" onclick="closeModal()">Cancelar</button>
+              <button type="submit" class="btn btn-primary flex-1">Crear usuario</button>
+            </div>
+          </form>
+        </div>
+      </div>
+    </div>
+  `;
+  document.getElementById('modal-backdrop').addEventListener('click', e => {
+    if (e.target.id === 'modal-backdrop') closeModal();
+  });
+  document.getElementById('form-nuevo-usuario').addEventListener('submit', e => {
+    e.preventDefault();
+    const fd      = new FormData(e.target);
+    const nombre  = String(fd.get('nombre')).trim();
+    const username= String(fd.get('username')).trim();
+    const clave   = String(fd.get('clave')).trim();
+    const comercio= String(fd.get('comercio'));
+    const vistas  = fd.getAll('vistas');
+    if (!nombre || !username || !clave) { toast('Completá todos los campos'); return; }
+    if (vistas.length === 0) { toast('Seleccioná al menos una vista'); return; }
+    STATE.usuarios.push({
+      nombre,
+      username,
+      email: username + '@nexo.local',
+      clave,
+      rol: 'Operador',
+      comercio,
+      vistas,
+      estado: 'Activo',
+    });
+    saveToStorage();
+    toast(`Usuario "${nombre}" creado`);
+    closeModal();
+    render();
+  });
 }
 
 /* =========================================================
@@ -1551,6 +1889,11 @@ function openReceiptModal(venta) {
               <span class="text-muted">Total BS</span>
               <span class="text-2xl font-bold neon-text">${fmtBS(venta.totalBS)}</span>
             </div>
+            ${venta.metodoPagoLabel ? `
+            <div class="divider"></div>
+            <div class="flex justify-between text-muted"><span>Método de pago</span><span class="font-semibold text-ink">${venta.metodoPagoLabel}</span></div>
+            ${venta.vuelto ? `<div class="flex justify-between"><span class="text-muted">${venta.vuelto.label}</span><span class="font-semibold neon-text">${venta.vuelto.valor}</span></div>` : ''}
+            ` : ''}
           </div>
 
           <div class="divider"></div>
