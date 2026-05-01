@@ -1,1 +1,15 @@
-{ "cleanUrls": true }
+{
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "headers": [
+    {
+      "source": "/(.*)",
+      "headers": [
+        { "key": "Cache-Control", "value": "no-cache" }
+      ]
+    }
+  ],
+  "rewrites": [
+    { "source": "/((?!app\\.js$).*)", "destination": "/index.html" }
+  ]
+}
