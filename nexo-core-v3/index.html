@@ -1,8 +1,8 @@
 /* =========================================================
    CONFIGURACIÓN Y CLIENTE SUPABASE
    ========================================================= */
-const supabaseUrl = 'TU_URL_DE_SUPABASE'; // Reemplaza con tu URL
-const supabaseKey = 'TU_ANON_KEY_DE_SUPABASE'; // Reemplaza con tu Key
+const supabaseUrl = 'TU_URL_DE_SUPABASE'; // <--- Pon tu URL aquí
+const supabaseKey = 'TU_ANON_KEY_DE_SUPABASE'; // <--- Pon tu Key aquí
 const supabase = supabase.createClient(supabaseUrl, supabaseKey);
 
 /* =========================================================
@@ -46,7 +46,7 @@ async function handleLogin(e) {
    CARGA DE DATOS DESDE SUPABASE
    ========================================================= */
 async function initApp() {
-    // Cargar Inventario
+    // Cargar Inventario desde tabla 'products'
     const { data: invData, error: invErr } = await supabase
         .from('products')
         .select('*')
@@ -54,7 +54,7 @@ async function initApp() {
 
     if (!invErr) STATE.inventory = invData;
 
-    // Cargar Ventas del día
+    // Cargar Ventas del día desde tabla 'sales'
     const { data: salesData } = await supabase
         .from('sales')
         .select('*')
@@ -78,7 +78,6 @@ async function procesarVenta() {
         created_at: new Date()
     };
 
-    // 1. Guardar en Supabase
     const { data, error } = await supabase
         .from('sales')
         .insert([nuevaVenta])
@@ -87,7 +86,6 @@ async function procesarVenta() {
     if (error) {
         alert("Error al registrar venta: " + error.message);
     } else {
-        // 2. Actualizar estado local y limpiar
         STATE.sales.unshift(data[0]);
         STATE.cart = [];
         alert("Venta procesada con éxito");
@@ -100,8 +98,8 @@ async function procesarVenta() {
    ========================================================= */
 function renderAll() {
     renderInventory();
-    renderCart();
-    updateStats();
+    if (typeof renderCart === 'function') renderCart();
+    if (typeof updateStats === 'function') updateStats();
 }
 
 function renderInventory() {
@@ -109,12 +107,13 @@ function renderInventory() {
     if (!container) return;
 
     container.innerHTML = STATE.inventory.map(prod => `
-        <div class="card">
-            <h4>${prod.name}</h4>
-            <p>$${prod.price}</p>
-            <button onclick="addToCart(${prod.id})">Agregar</button>
+        <div class="card p-4 border rounded shadow-sm">
+            <h4 class="font-bold">${prod.name}</h4>
+            <p class="text-green-600">$${prod.price}</p>
+            <button class="bg-blue-500 text-white px-2 py-1 rounded mt-2" 
+                    onclick="addToCart(${prod.id})">
+                Agregar
+            </button>
         </div>
     `).join('');
 }
-
-// ... Resto de tus funciones de UI (addToCart, renderCart, etc.)
