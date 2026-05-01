@@ -722,6 +722,21 @@ const VIEWS = {
         tenant().inventario.unshift(item);
         tenant().productos.unshift({ nombre, precio: precioUSD });
         saveToStorage();
+        // Guardar producto en Supabase
+        if (typeof _supabase !== 'undefined' && _supabase) {
+          _supabase.from('products').insert([{
+            tenant_id:  STATE.currentTenant,
+            sku:        item.sku,
+            name:       item.nombre,
+            stock:      item.stock,
+            price_usd:  item.precioUSD,
+            cost_usd:   item.costoUSD,
+            currency:   item.moneda,
+          }]).then(({ error }) => {
+            if (error) console.error('[Supabase] Error al guardar producto:', error.message);
+            else console.log('[Supabase] Producto guardado:', item.nombre);
+          });
+        }
         toast(`"${nombre}" agregado · ${fmtUSD(precioUSD)} · ${fmtBS(usdToBs(precioUSD))}`);
         render();
       });
@@ -1148,19 +1163,22 @@ function changeQty(i, d) {
 function checkout() {
   if (!STATE.cart.length) { toast('El carrito está vacío'); return; }
   const totalUSD = STATE.cart.reduce((a,c) => a + c.precio * c.qty, 0);
-  // Descuento de stock si el producto existe en el inventario
+  // Descuento de stock local
   const inv = tenant().inventario;
   STATE.cart.forEach(c => {
     const p = inv.find(x => x.nombre === c.nombre);
     if (p && typeof p.stock === 'number') p.stock = Math.max(0, p.stock - c.qty);
   });
-  // Persistir venta en histórico
+  // Persistir venta en histórico local
   const venta = {
     id: 'V-' + Date.now().toString(36).toUpperCase(),
     fecha: new Date().toISOString(),
     tenantKey: STATE.currentTenant,
     tenantName: tenant().name,
-    items: STATE.cart.map(c => ({ nombre: c.nombre, qty: c.qty, precio: c.precio })),
+    items: STATE.cart.map(c => {
+      const invItem = tenant().inventario.find(x => x.nombre === c.nombre);
+      return { nombre: c.nombre, qty: c.qty, precio: c.precio, sku: invItem?.sku || '' };
+    }),
     totalUSD,
     bcv: STATE.bcv,
     totalBS: usdToBs(totalUSD),
@@ -1168,6 +1186,18 @@ function checkout() {
   tenant().ventas = tenant().ventas || [];
   tenant().ventas.unshift(venta);
   saveToStorage();
+  // Persistir en Supabase (en paralelo, sin bloquear la UI)
+  if (typeof registrarVentaSupabase === 'function') {
+    registrarVentaSupabase(venta).then(({ error }) => {
+      if (error) console.error('[Supabase] Error al registrar venta:', error.message);
+      else console.log('[Supabase] Venta registrada:', venta.id);
+    });
+  }
+  if (typeof descontarStockSupabase === 'function') {
+    descontarStockSupabase(venta.items, STATE.currentTenant).catch(err =>
+      console.error('[Supabase] Error al descontar stock:', err)
+    );
+  }
   STATE.cart = [];
   renderPOS();
   openReceiptModal(venta);

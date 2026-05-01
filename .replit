@@ -37,7 +37,7 @@ outputType = "webview"
 
 [[workflows.workflow.tasks]]
 task = "shell.exec"
-args = "python3 -m http.server 5000 --bind 0.0.0.0"
+args = "PORT=5000 NODE_ENV=development pnpm --filter @workspace/api-server run dev"
 waitForPort = 5000
 
 [[workflows.workflow]]
