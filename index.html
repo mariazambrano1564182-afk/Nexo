@@ -215,6 +215,10 @@
         <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9c.36.18.66.46.86.8.2.34.31.74.31 1.15 0 .41-.11.81-.31 1.15-.2.34-.5.62-.86.8Z"/></svg>
         Configuración
       </button>
+      <button data-nav="infraestructura" data-role="admin" class="nav-item w-full flex items-center gap-3 px-3 py-2.5 rounded-lg text-left text-muted">
+        <svg class="w-4 h-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2"/><path d="M8 21h8M12 17v4"/><circle cx="12" cy="10" r="2"/><path d="M12 8V6M12 14v-2M8.5 11.5l-1.5-1M17 10h-2M15.5 8.5l-1-1M15.5 11.5l-1 1M8.5 8.5l1 1"/></svg>
+        Infraestructura
+      </button>
     </nav>
 
     <div class="mt-auto p-3">
@@ -270,6 +274,7 @@
           <button data-nav="reportes" class="nav-item px-3 py-1.5 rounded-lg text-muted">Reportes</button>
           <button data-nav="usuarios" data-role="admin" class="nav-item px-3 py-1.5 rounded-lg text-muted">Usuarios</button>
           <button data-nav="configuracion" data-role="admin" class="nav-item px-3 py-1.5 rounded-lg text-muted">Configuración</button>
+          <button data-nav="infraestructura" data-role="admin" class="nav-item px-3 py-1.5 rounded-lg text-muted">Infraestructura</button>
         </div>
       </div>
     </header>
@@ -403,6 +408,12 @@ const STATE = {
   ],
   cart: [],
   view: 'dashboard',
+  infraNotifs: [
+    { id: 1, type: 'error',   time: 'Hace 3h',    msg: 'Farmacia Global — Sistema sin actividad desde hace 3 horas' },
+    { id: 2, type: 'warning', time: 'Hace 3 días', msg: 'Farmacia Global — Tasa BCV no actualizada hace 3 días' },
+    { id: 3, type: 'info',    time: 'Hace 1h',    msg: 'Ferretería El Centro — Tasa BCV sincronizada correctamente' },
+    { id: 4, type: 'info',    time: 'Ayer 14:00', msg: 'Sistema — Backup de datos ejecutado exitosamente' },
+  ],
 };
 
 /* =========================================================
@@ -1101,6 +1112,182 @@ const VIEWS = {
 
     return wrap;
   },
+
+  infraestructura() {
+    const MRR_PER_TENANT = 49;
+    const tenantList = Object.entries(STATE.tenants);
+    const tenantCount = tenantList.length;
+    const mrr = tenantCount * MRR_PER_TENANT;
+
+    const tenantStatus = {
+      ferreteria: { online: true,  lastActivity: 'Hace 2 min', bcvUpdated: true,  lastBcvUpdate: 'Hace 1h',     plan: 'Pro' },
+      farmacia:   { online: false, lastActivity: 'Hace 3h',    bcvUpdated: false, lastBcvUpdate: 'Hace 3 días', plan: 'Pro' },
+    };
+
+    const notifs = STATE.infraNotifs;
+    const activeAlerts = notifs.filter(n => n.type !== 'info').length;
+    const onlineCount = tenantList.filter(([k]) => tenantStatus[k]?.online !== false).length;
+    const allOnline = onlineCount === tenantCount;
+
+    const notifDot = type => {
+      if (type === 'error')   return `<div class="w-2 h-2 rounded-full mt-1.5 shrink-0" style="background:#fb7185;box-shadow:0 0 8px rgba(244,63,94,.7)"></div>`;
+      if (type === 'warning') return `<div class="w-2 h-2 rounded-full mt-1.5 shrink-0" style="background:#fbbf24;box-shadow:0 0 8px rgba(251,191,36,.7)"></div>`;
+      return `<div class="w-2 h-2 rounded-full mt-1.5 shrink-0" style="background:#34d399;box-shadow:0 0 8px rgba(52,211,153,.7)"></div>`;
+    };
+
+    const statusBadge = online => online
+      ? `<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold" style="background:rgba(52,211,153,.12);color:#34d399;border:1px solid rgba(52,211,153,.3)">● ONLINE</span>`
+      : `<span class="text-[10px] px-2 py-0.5 rounded-full font-semibold" style="background:rgba(244,63,94,.12);color:#fb7185;border:1px solid rgba(244,63,94,.3)">● OFFLINE</span>`;
+
+    const wrap = document.createElement('div');
+    wrap.innerHTML = `
+      <div class="flex items-center justify-between mb-4">
+        <div>
+          <div class="text-[11px] uppercase tracking-[0.25em] text-muted">Vista global</div>
+          <h2 class="text-xl font-bold">Dashboard de Infraestructura</h2>
+        </div>
+        <span class="badge-neon text-[11px] px-3 py-1 rounded-full">Super Admin</span>
+      </div>
+
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+        <!-- Tasa BCV -->
+        <div class="glass p-5 neon-border">
+          <div class="text-[11px] uppercase tracking-widest text-muted">Tasa BCV vigente</div>
+          <div class="flex items-end gap-2 mt-2">
+            <div class="text-3xl font-bold neon-text">${STATE.bcv.toFixed(2)}</div>
+            <div class="text-sm text-muted pb-1">Bs / USD</div>
+          </div>
+          <div class="text-xs text-muted mt-1">Aplicada a todos los comercios</div>
+          <form id="infra-form-bcv" class="flex gap-2 mt-3">
+            <input class="input !py-1 text-sm" type="number" step="0.01" name="bcv" value="${STATE.bcv}" required />
+            <button class="btn btn-primary !py-1 text-xs whitespace-nowrap">Actualizar</button>
+          </form>
+        </div>
+
+        <!-- SaaS Revenue -->
+        <div class="glass p-5">
+          <div class="text-[11px] uppercase tracking-widest text-muted">Ingresos SaaS</div>
+          <div class="text-3xl font-bold mt-2" style="color:#34d399;text-shadow:0 0 12px rgba(52,211,153,.4)">${fmtUSD(mrr)}</div>
+          <div class="text-xs text-muted mt-1">/ mes · ${tenantCount} comercios activos</div>
+          <div class="divider my-3"></div>
+          <div class="flex justify-between text-xs">
+            <span class="text-muted">Plan Pro × ${tenantCount}</span>
+            <span class="font-semibold">${fmtUSD(MRR_PER_TENANT)}/mes c/u</span>
+          </div>
+        </div>
+
+        <!-- System Status -->
+        <div class="glass p-5">
+          <div class="text-[11px] uppercase tracking-widest text-muted">Estado del sistema</div>
+          <div class="flex items-center gap-2 mt-2">
+            ${allOnline
+              ? `<div class="pulse-dot"></div><div class="text-xl font-bold" style="color:#34d399">Operativo</div>`
+              : `<div class="w-2.5 h-2.5 rounded-full animate-pulse" style="background:#fb7185;box-shadow:0 0 10px rgba(244,63,94,.7)"></div><div class="text-xl font-bold" style="color:#fb7185">Alertas</div>`
+            }
+          </div>
+          <div class="text-xs text-muted mt-1">${allOnline ? 'Todos los nodos funcionando' : 'Revisar comercios offline'}</div>
+          <div class="divider my-3"></div>
+          <div class="flex justify-between text-xs">
+            <span class="text-muted">Comercios online</span>
+            <span class="font-semibold">${onlineCount} / ${tenantCount}</span>
+          </div>
+        </div>
+
+        <!-- Notifications -->
+        <div class="glass p-5">
+          <div class="text-[11px] uppercase tracking-widest text-muted">Notificaciones</div>
+          <div class="flex items-center gap-2 mt-2">
+            <div class="text-3xl font-bold" style="color:${activeAlerts > 0 ? '#fbbf24' : '#34d399'};text-shadow:0 0 12px ${activeAlerts > 0 ? 'rgba(251,191,36,.4)' : 'rgba(52,211,153,.4)'}">
+              ${activeAlerts}
+            </div>
+            <div class="text-sm text-muted">alertas activas</div>
+          </div>
+          <div class="text-xs text-muted mt-1">${notifs.length} eventos en el registro</div>
+          <div class="divider my-3"></div>
+          <div class="flex justify-between text-xs">
+            <span class="text-muted">Último evento</span>
+            <span class="font-semibold">${notifs[0]?.time || '—'}</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Tenant cards -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-5">
+        ${tenantList.map(([k, t]) => {
+          const st = tenantStatus[k] || { online: true, lastActivity: '—', bcvUpdated: true, lastBcvUpdate: '—', plan: 'Pro' };
+          const ventasTotal = (t.ventas || []).reduce((a, v) => a + v.totalUSD, 0);
+          return `
+            <div class="glass p-5">
+              <div class="flex items-start justify-between mb-3">
+                <div>
+                  <div class="font-semibold text-base">${t.name}</div>
+                  <div class="text-xs text-muted">${t.type} · ${t.city}</div>
+                </div>
+                <div class="flex flex-col items-end gap-1">
+                  ${statusBadge(st.online)}
+                  <span class="text-[10px] text-muted">Plan ${st.plan}</span>
+                </div>
+              </div>
+              <div class="grid grid-cols-2 gap-2 text-xs">
+                <div class="glass p-2.5 rounded-xl">
+                  <div class="text-muted uppercase tracking-widest text-[10px]">Última actividad</div>
+                  <div class="font-semibold mt-0.5">${st.lastActivity}</div>
+                </div>
+                <div class="glass p-2.5 rounded-xl">
+                  <div class="text-muted uppercase tracking-widest text-[10px]">Tasa BCV</div>
+                  <div class="font-semibold mt-0.5" style="color:${st.bcvUpdated ? '#34d399' : '#fbbf24'}">${st.bcvUpdated ? '✓ Al día' : '⚠ Desactualizada'}</div>
+                </div>
+                <div class="glass p-2.5 rounded-xl">
+                  <div class="text-muted uppercase tracking-widest text-[10px]">Ventas registradas</div>
+                  <div class="font-semibold mt-0.5">${fmtUSD(ventasTotal)}</div>
+                </div>
+                <div class="glass p-2.5 rounded-xl">
+                  <div class="text-muted uppercase tracking-widest text-[10px]">Mensualidad</div>
+                  <div class="font-semibold mt-0.5" style="color:#34d399">${fmtUSD(MRR_PER_TENANT)}</div>
+                </div>
+              </div>
+            </div>
+          `;
+        }).join('')}
+      </div>
+
+      <!-- Notifications feed -->
+      <div class="glass mt-5 p-5">
+        <div class="flex items-center justify-between mb-4">
+          <div>
+            <div class="text-[11px] uppercase tracking-widest text-muted">Registro de eventos</div>
+            <div class="text-base font-semibold mt-0.5">Notificaciones del sistema</div>
+          </div>
+          <span class="badge-neon text-[11px] px-2 py-1 rounded-md">${notifs.length} eventos</span>
+        </div>
+        <div class="space-y-2">
+          ${notifs.map(n => `
+            <div class="glass p-3 flex items-start gap-3 rounded-xl">
+              ${notifDot(n.type)}
+              <div class="flex-1 min-w-0">
+                <div class="text-sm">${n.msg}</div>
+                <div class="text-[11px] text-muted mt-0.5">${n.time}</div>
+              </div>
+              ${n.type !== 'info' ? `<button class="btn btn-ghost !py-0.5 !px-2 text-xs shrink-0" onclick="dismissInfraNotif(${n.id})">Cerrar</button>` : ''}
+            </div>
+          `).join('')}
+        </div>
+      </div>
+    `;
+
+    wrap.querySelector('#infra-form-bcv').addEventListener('submit', e => {
+      e.preventDefault();
+      const v = Number(new FormData(e.target).get('bcv'));
+      if (!v || v <= 0) return;
+      STATE.bcv = v;
+      saveToStorage();
+      toast(`Tasa BCV actualizada a Bs ${v.toFixed(2)} / USD`);
+      render();
+    });
+
+    return wrap;
+  },
 };
 
 /* =========================================================
@@ -1427,6 +1614,11 @@ function deleteProduct(idx) {
   render();
 }
 
+function dismissInfraNotif(id) {
+  STATE.infraNotifs = STATE.infraNotifs.filter(n => n.id !== id);
+  render();
+}
+
 function deleteGasto(idx) {
   const g = tenant().gastos;
   if (idx < 0 || idx >= g.length) return;
@@ -1500,7 +1692,7 @@ function barChart(data) {
    ========================================================= */
 function setView(v) {
   // Bloqueo: no-admins no pueden navegar a vistas restringidas
-  if (!isAdmin() && (v === 'configuracion' || v === 'usuarios')) {
+  if (!isAdmin() && (v === 'configuracion' || v === 'usuarios' || v === 'infraestructura')) {
     toast('No tenés permisos para acceder a esa sección');
     return;
   }
