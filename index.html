@@ -429,49 +429,11 @@ const STATE = {
 };
 
 /* =========================================================
-   Persistencia (localStorage)
+   Persistencia — stateless, no-ops (todo viene de la DB)
    ========================================================= */
-const LS_KEY = 'nexo_core_v3_data';
-
-function loadFromStorage() {
-  try {
-    const raw = localStorage.getItem(LS_KEY);
-    if (!raw) return;
-    const data = JSON.parse(raw);
-    if (typeof data.bcv === 'number') STATE.bcv = data.bcv;
-    if (data.tenants) {
-      Object.entries(data.tenants).forEach(([k, t]) => {
-        if (STATE.tenants[k]) {
-          if (Array.isArray(t.inventario)) STATE.tenants[k].inventario = t.inventario;
-          if (Array.isArray(t.gastos))     STATE.tenants[k].gastos = t.gastos;
-          if (Array.isArray(t.ventas))     STATE.tenants[k].ventas = t.ventas;
-        }
-      });
-    }
-  } catch (err) {
-    console.warn('No se pudo leer el almacenamiento local', err);
-  }
-}
-
-function saveToStorage() {
-  const data = {
-    bcv: STATE.bcv,
-    tenants: Object.fromEntries(
-      Object.entries(STATE.tenants).map(([k, t]) => [k, {
-        inventario: t.inventario,
-        gastos: t.gastos,
-        ventas: t.ventas,
-      }])
-    ),
-  };
-  try { localStorage.setItem(LS_KEY, JSON.stringify(data)); }
-  catch (err) { console.warn('No se pudo guardar en almacenamiento local', err); }
-}
-
-function resetStorage() {
-  localStorage.removeItem(LS_KEY);
-  location.reload();
-}
+function loadFromStorage() {}
+function saveToStorage() {}
+function resetStorage() { location.reload(); }
 
 /* =========================================================
    Utilidades
@@ -1261,12 +1223,13 @@ const VIEWS = {
     `;
 
     // Form: Registrar Comercio
-    wrap.querySelector('#form-comercio').addEventListener('submit', e => {
+    wrap.querySelector('#form-comercio').addEventListener('submit', async e => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const nombre = fd.get('nombre').toString().trim();
       const key = nombre.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'') + '_' + Date.now().toString(36);
-      STATE.tenants[key] = {
+      const tenantData = {
+        id: key,
         name: nombre,
         rif: fd.get('rif').toString().trim(),
         direccion: fd.get('direccion').toString().trim(),
@@ -1274,20 +1237,37 @@ const VIEWS = {
         plan: fd.get('plan').toString(),
         city: '',
         manager: '',
-        estado: 'Activo',
-        kpis: { ventasUSD: 0, ticketProm: 0, productos: 0, clientes: 0 },
-        inventario: [], gastos: [], ventas: [],
-        ventasMes: [0,0,0,0,0,0,0,0,0,0,0,0],
-        productos: [],
-        zonaPostal: '',
+        zona_postal: '0000',
       };
-      e.target.reset();
-      toast(`Comercio "${nombre}" registrado`);
-      render();
+      try {
+        await createTenantInDB(key, tenantData);
+        STATE.tenants[key] = {
+          name: nombre,
+          rif: tenantData.rif,
+          direccion: tenantData.direccion,
+          type: tenantData.type,
+          plan: tenantData.plan,
+          city: '',
+          manager: '',
+          estado: 'Activo',
+          kpis: { ventasUSD: 0, ticketProm: 0, productos: 0, clientes: 0 },
+          inventario: [], gastos: [], ventas: [],
+          ventasMes: [0,0,0,0,0,0,0,0,0,0,0,0],
+          productos: [],
+          zonaPostal: '0000',
+          _dbId: key,
+        };
+        rebuildTenantSwitcher();
+        e.target.reset();
+        toast(`Comercio "${nombre}" registrado`);
+        render();
+      } catch(err) {
+        toast('Error al registrar comercio: ' + err.message);
+      }
     });
 
     // Form: Registrar Usuario
-    wrap.querySelector('#form-usuario').addEventListener('submit', e => {
+    wrap.querySelector('#form-usuario').addEventListener('submit', async e => {
       e.preventDefault();
       const fd = new FormData(e.target);
       const nombre = fd.get('nombre').toString().trim();
@@ -1297,20 +1277,35 @@ const VIEWS = {
       }
       const vistas = fd.getAll('vistas').map(v => v.toString());
       if (vistas.length === 0) { toast('Selecciona al menos una vista'); return; }
-      STATE.usuarios.push({
+      const userData = {
         nombre,
         whatsapp: fd.get('whatsapp').toString().trim(),
         usuario,
         clave: fd.get('clave').toString(),
         comercio: fd.get('comercio').toString(),
         rol: 'Operador',
-        estado: 'Activo',
-        email: '',
         vistas,
-      });
-      e.target.reset();
-      toast(`Usuario "${nombre}" registrado`);
-      render();
+      };
+      try {
+        const row = await createUsuarioInDB(userData);
+        STATE.usuarios.push({
+          _dbId: row.id,
+          nombre,
+          whatsapp: userData.whatsapp,
+          usuario,
+          clave: userData.clave,
+          comercio: userData.comercio,
+          rol: 'Operador',
+          estado: 'Activo',
+          email: '',
+          vistas,
+        });
+        e.target.reset();
+        toast(`Usuario "${nombre}" registrado`);
+        render();
+      } catch(err) {
+        toast('Error al registrar usuario: ' + err.message);
+      }
     });
 
     return wrap;
@@ -1424,14 +1419,17 @@ const VIEWS = {
     `;
 
     setTimeout(() => {
-      $('#form-bcv').addEventListener('submit', e => {
+      $('#form-bcv').addEventListener('submit', async e => {
         e.preventDefault();
         const v = Number(new FormData(e.target).get('bcv'));
         if (!v || v <= 0) return;
-        STATE.bcv = v;
-        saveToStorage();
-        toast(`Tasa BCV actualizada a Bs ${v.toFixed(2)} / USD`);
-        render();
+        try {
+          await updateBCVRate(v);
+          toast(`Tasa BCV actualizada a Bs ${v.toFixed(2)} / USD`);
+          render();
+        } catch(err) {
+          toast('Error al actualizar la tasa BCV');
+        }
       });
       const usd = $('#conv-usd'), bs = $('#conv-bs');
       usd.addEventListener('input', () => bs.value = (Number(usd.value) * STATE.bcv).toFixed(2));
@@ -2300,22 +2298,33 @@ function actualizarPlan(key, valor) {
   if (bsEl) bsEl.textContent = 'Bs ' + (v * STATE.bcv).toLocaleString('es-VE', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 
-function suspenderComercio(key) {
+async function suspenderComercio(key) {
   const t = STATE.tenants[key];
   if (!t) return;
-  t.estado = t.estado === 'Activo' ? 'Suspendido' : 'Activo';
-  toast(`Comercio "${t.name}" ${t.estado.toLowerCase()}`);
-  render();
+  const nuevoEstado = t.estado === 'Activo' ? 'Suspendido' : 'Activo';
+  try {
+    await updateTenantInDB(key, { estado: nuevoEstado });
+    t.estado = nuevoEstado;
+    toast(`Comercio "${t.name}" ${t.estado.toLowerCase()}`);
+    render();
+  } catch(err) { toast('Error: ' + err.message); }
 }
-function eliminarComercio(key) {
+async function eliminarComercio(key) {
   const t = STATE.tenants[key];
   if (!t) return;
   if (!confirm(`¿Eliminar "${t.name}"? Esta acción no se puede deshacer.`)) return;
-  delete STATE.tenants[key];
-  toast(`Comercio eliminado`);
-  render();
+  try {
+    await deleteTenantFromDB(key);
+    delete STATE.tenants[key];
+    if (STATE.currentTenant === key) {
+      STATE.currentTenant = Object.keys(STATE.tenants)[0] || '';
+    }
+    rebuildTenantSwitcher();
+    toast(`Comercio eliminado`);
+    render();
+  } catch(err) { toast('Error: ' + err.message); }
 }
-function editarComercio(key) {
+async function editarComercio(key) {
   const t = STATE.tenants[key];
   if (!t) return;
   const nombre = prompt('Nombre del comercio:', t.name);
@@ -2324,39 +2333,58 @@ function editarComercio(key) {
   if (rif === null) return;
   const dir = prompt('Dirección:', t.direccion || '');
   if (dir === null) return;
-  t.name = nombre.trim() || t.name;
-  t.rif  = rif.trim();
-  t.direccion = dir.trim();
-  toast(`Comercio actualizado`);
-  render();
+  const newName = nombre.trim() || t.name;
+  const newRif  = rif.trim();
+  const newDir  = dir.trim();
+  try {
+    await updateTenantInDB(key, { name: newName, rif: newRif, direccion: newDir });
+    t.name = newName;
+    t.rif  = newRif;
+    t.direccion = newDir;
+    rebuildTenantSwitcher();
+    toast(`Comercio actualizado`);
+    render();
+  } catch(err) { toast('Error: ' + err.message); }
 }
 
-function suspenderUsuario(i) {
+async function suspenderUsuario(i) {
   const u = STATE.usuarios[i];
   if (!u) return;
-  u.estado = u.estado === 'Activo' ? 'Suspendido' : 'Activo';
-  toast(`Usuario "${u.nombre}" ${u.estado.toLowerCase()}`);
-  render();
+  const nuevoEstado = u.estado === 'Activo' ? 'Suspendido' : 'Activo';
+  try {
+    if (u._dbId) await updateUsuarioInDB(u._dbId, { estado: nuevoEstado });
+    u.estado = nuevoEstado;
+    toast(`Usuario "${u.nombre}" ${u.estado.toLowerCase()}`);
+    render();
+  } catch(err) { toast('Error: ' + err.message); }
 }
-function eliminarUsuario(i) {
+async function eliminarUsuario(i) {
   const u = STATE.usuarios[i];
   if (!u) return;
   if (!confirm(`¿Eliminar usuario "${u.nombre}"?`)) return;
-  STATE.usuarios.splice(i, 1);
-  toast(`Usuario eliminado`);
-  render();
+  try {
+    if (u._dbId) await deleteUsuarioFromDB(u._dbId);
+    STATE.usuarios.splice(i, 1);
+    toast(`Usuario eliminado`);
+    render();
+  } catch(err) { toast('Error: ' + err.message); }
 }
-function editarUsuario(i) {
+async function editarUsuario(i) {
   const u = STATE.usuarios[i];
   if (!u) return;
   const nombre = prompt('Nombre completo:', u.nombre);
   if (nombre === null) return;
   const wa = prompt('WhatsApp:', u.whatsapp || '');
   if (wa === null) return;
-  u.nombre    = nombre.trim() || u.nombre;
-  u.whatsapp  = wa.trim();
-  toast(`Usuario actualizado`);
-  render();
+  const newNombre = nombre.trim() || u.nombre;
+  const newWa    = wa.trim();
+  try {
+    if (u._dbId) await updateUsuarioInDB(u._dbId, { nombre: newNombre, whatsapp: newWa });
+    u.nombre   = newNombre;
+    u.whatsapp = newWa;
+    toast(`Usuario actualizado`);
+    render();
+  } catch(err) { toast('Error: ' + err.message); }
 }
 
 function dismissInfraNotif(id) {
@@ -2585,10 +2613,9 @@ document.getElementById('form-login').addEventListener('submit', e => {
 });
 
 /* =========================================================
-   Boot
+   Boot — el Global State Provider (app.js) carga el STATE
+   desde la DB antes de que el usuario interactúe.
    ========================================================= */
-loadFromStorage();
-
 if (restoreSession()) {
   hideLogin();
   applySessionToUI();

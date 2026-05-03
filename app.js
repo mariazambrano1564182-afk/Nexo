@@ -1,66 +1,275 @@
 /* =========================================================
-   CONFIGURACIÓN Y CLIENTE SUPABASE
-   Las credenciales se obtienen del servidor para no exponerlas
-   en el código fuente del navegador.
+   NEXO CORE V3 — Global State Provider
+   Stateless: all config comes from DB (Supabase / local PG).
+   Realtime subscriptions push live updates to all clients.
    ========================================================= */
-let _supabase = null;
 
-async function initSupabase() {
+let _supabase = null;
+let _realtimeChannel = null;
+
+/* ── Bootstrap ─────────────────────────────────────────── */
+
+async function initGlobalStateProvider() {
   try {
     const res = await fetch('/api/config');
     if (!res.ok) throw new Error('Config endpoint returned ' + res.status);
     const { supabaseUrl, supabaseAnonKey } = await res.json();
     const { createClient } = window.supabase || {};
-    if (!createClient) throw new Error('supabase-js no cargado');
+    if (!createClient) throw new Error('supabase-js not loaded');
     _supabase = createClient(supabaseUrl, supabaseAnonKey);
-    console.log('[Supabase] Cliente inicializado correctamente');
+    console.log('[GSP] Supabase client ready');
   } catch (err) {
-    console.warn('[Supabase] No se pudo inicializar:', err.message);
+    console.warn('[GSP] Supabase init failed:', err.message, '— continuing without Realtime');
+  }
+
+  await runMigrations();
+  await loadStateFromDB();
+  subscribeRealtime();
+}
+
+/* ── Migrations (idempotent) ───────────────────────────── */
+
+async function runMigrations() {
+  try {
+    const res = await fetch('/api/migrate', { method: 'POST' });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.error || 'Migration failed');
+    console.log('[GSP] Migrations:', data.message);
+  } catch (err) {
+    console.error('[GSP] Migration error:', err.message);
   }
 }
 
-/* =========================================================
-   AUTENTICACIÓN SUPABASE (complementa el sistema local)
-   ========================================================= */
-async function supabaseLogin(email, password) {
-  if (!_supabase) return { error: { message: 'Supabase no configurado' } };
-  const { data, error } = await _supabase.auth.signInWithPassword({ email, password });
-  return { data, error };
+/* ── Load full state from DB ───────────────────────────── */
+
+async function loadStateFromDB() {
+  try {
+    const [cfgRes, tenantsRes, usuariosRes] = await Promise.all([
+      fetch('/api/global-config'),
+      fetch('/api/tenants'),
+      fetch('/api/usuarios'),
+    ]);
+
+    if (cfgRes.ok) {
+      const cfg = await cfgRes.json();
+      if (typeof cfg.tasa_bcv === 'number') {
+        STATE.bcv = cfg.tasa_bcv;
+        console.log('[GSP] BCV loaded from DB:', STATE.bcv);
+      }
+    }
+
+    if (tenantsRes.ok) {
+      const rows = await tenantsRes.json();
+      if (Array.isArray(rows) && rows.length > 0) {
+        STATE.tenants = {};
+        for (const row of rows) {
+          STATE.tenants[row.id] = dbRowToTenant(row);
+        }
+        if (!STATE.tenants[STATE.currentTenant]) {
+          STATE.currentTenant = Object.keys(STATE.tenants)[0];
+        }
+        console.log('[GSP] Tenants loaded from DB:', Object.keys(STATE.tenants));
+      }
+    }
+
+    if (usuariosRes.ok) {
+      const rows = await usuariosRes.json();
+      if (Array.isArray(rows)) {
+        STATE.usuarios = rows.map(dbRowToUsuario);
+        console.log('[GSP] Usuarios loaded from DB:', STATE.usuarios.length);
+      }
+    }
+
+    rebuildTenantSwitcher();
+    if (typeof render === 'function' && STATE.session) render();
+  } catch (err) {
+    console.error('[GSP] loadStateFromDB error:', err.message);
+  }
 }
 
-async function supabaseLogout() {
+/* ── DB row → STATE shape converters ───────────────────── */
+
+function dbRowToTenant(row) {
+  return {
+    name:       row.name,
+    rif:        row.rif        || '',
+    direccion:  row.direccion  || '',
+    type:       row.type       || 'Otro',
+    plan:       row.plan       || 'basico',
+    city:       row.city       || '',
+    manager:    row.manager    || '',
+    estado:     row.estado     || 'Activo',
+    zonaPostal: row.zona_postal || '0000',
+    kpis:       row.kpis       || { ventasUSD: 0, ticketProm: 0, productos: 0, clientes: 0 },
+    inventario: Array.isArray(row.inventario) ? row.inventario : [],
+    gastos:     Array.isArray(row.gastos)     ? row.gastos     : [],
+    ventas:     Array.isArray(row.ventas)     ? row.ventas     : [],
+    ventasMes:  Array.isArray(row.ventas_mes) ? row.ventas_mes : [0,0,0,0,0,0,0,0,0,0,0,0],
+    productos:  Array.isArray(row.productos)  ? row.productos  : [],
+    _dbId:      row.id,
+  };
+}
+
+function dbRowToUsuario(row) {
+  return {
+    _dbId:    row.id,
+    nombre:   row.nombre   || '',
+    whatsapp: row.whatsapp || '',
+    usuario:  row.usuario  || '',
+    clave:    row.clave    || '',
+    comercio: row.comercio || '',
+    rol:      row.rol      || 'Operador',
+    estado:   row.estado   || 'Activo',
+    email:    row.email    || '',
+    vistas:   Array.isArray(row.vistas) ? row.vistas : ['dashboard','pos','inventario'],
+  };
+}
+
+/* ── Realtime subscriptions ─────────────────────────────── */
+
+function subscribeRealtime() {
   if (!_supabase) return;
-  await _supabase.auth.signOut();
+
+  if (_realtimeChannel) {
+    _supabase.removeChannel(_realtimeChannel);
+  }
+
+  _realtimeChannel = _supabase
+    .channel('nexo-core-v3-global')
+    .on('postgres_changes', {
+      event: '*',
+      schema: 'public',
+      table:  'global_config',
+    }, handleGlobalConfigChange)
+    .subscribe((status) => {
+      console.log('[GSP] Realtime status:', status);
+    });
+
+  console.log('[GSP] Realtime subscriptions active');
 }
 
-/* =========================================================
-   SINCRONIZACIÓN DE INVENTARIO — API propia del servidor
-   ========================================================= */
-async function syncInventarioFromSupabase(tenantId) {
-  try {
-    const res = await fetch(`/api/db/products?tenant_id=${encodeURIComponent(tenantId)}`);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return await res.json();
-  } catch (err) {
-    console.error('syncInventario:', err.message);
-    return null;
+function handleGlobalConfigChange(payload) {
+  console.log('[GSP] global_config changed:', payload);
+  const row = payload.new || payload.old;
+  if (!row) return;
+
+  if (row.key === 'tasa_bcv' && typeof row.value === 'number') {
+    STATE.bcv = row.value;
+    if (typeof render === 'function' && STATE.session) {
+      render();
+      if (typeof toast === 'function') {
+        toast(`Tasa BCV actualizada en tiempo real: Bs ${row.value.toFixed(2)}`);
+      }
+    }
   }
 }
 
-async function syncVentasFromSupabase(tenantId) {
+/* ── Tenant CRUD (writes back to DB) ───────────────────── */
+
+async function saveTenantToDB(tenantId) {
+  const t = STATE.tenants[tenantId];
+  if (!t) return;
   try {
-    const res = await fetch(`/api/db/sales?tenant_id=${encodeURIComponent(tenantId)}`);
-    if (!res.ok) throw new Error('HTTP ' + res.status);
-    return await res.json();
+    await fetch(`/api/tenants/${tenantId}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        inventario: t.inventario,
+        gastos:     t.gastos,
+        ventas:     t.ventas,
+        ventas_mes: t.ventasMes,
+        productos:  t.productos,
+        kpis:       t.kpis,
+      }),
+    });
   } catch (err) {
-    console.error('syncVentas:', err.message);
-    return null;
+    console.error('[GSP] saveTenantToDB error:', err.message);
   }
 }
 
-/* =========================================================
-   REGISTRO DE VENTA
-   ========================================================= */
+async function createTenantInDB(id, data) {
+  const res = await fetch('/api/tenants', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ id, ...data }),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Error al crear tenant');
+  return await res.json();
+}
+
+async function updateTenantInDB(id, fields) {
+  const res = await fetch(`/api/tenants/${id}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Error al actualizar tenant');
+  return await res.json();
+}
+
+async function deleteTenantFromDB(id) {
+  const res = await fetch(`/api/tenants/${id}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error((await res.json()).error || 'Error al eliminar tenant');
+}
+
+/* ── Usuario CRUD ──────────────────────────────────────── */
+
+async function createUsuarioInDB(data) {
+  const res = await fetch('/api/usuarios', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(data),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Error al crear usuario');
+  return await res.json();
+}
+
+async function updateUsuarioInDB(dbId, fields) {
+  const res = await fetch(`/api/usuarios/${dbId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fields),
+  });
+  if (!res.ok) throw new Error((await res.json()).error || 'Error al actualizar usuario');
+  return await res.json();
+}
+
+async function deleteUsuarioFromDB(dbId) {
+  const res = await fetch(`/api/usuarios/${dbId}`, { method: 'DELETE' });
+  if (!res.ok) throw new Error((await res.json()).error || 'Error al eliminar usuario');
+}
+
+/* ── BCV rate write-through ─────────────────────────────── */
+
+async function updateBCVRate(newRate) {
+  try {
+    const res = await fetch('/api/global-config/tasa_bcv', {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: newRate }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error);
+    STATE.bcv = newRate;
+  } catch (err) {
+    console.error('[GSP] updateBCVRate error:', err.message);
+    throw err;
+  }
+}
+
+/* ── Tenant switcher DOM sync ───────────────────────────── */
+
+function rebuildTenantSwitcher() {
+  const selects = document.querySelectorAll('#tenant-switcher');
+  selects.forEach(sel => {
+    const current = sel.value || STATE.currentTenant;
+    sel.innerHTML = Object.entries(STATE.tenants)
+      .map(([k, t]) => `<option value="${k}"${k === current ? ' selected' : ''}>${t.name}</option>`)
+      .join('');
+  });
+}
+
+/* ── Inventory / Sales write-through ───────────────────── */
+
 async function registrarVentaSupabase(venta) {
   try {
     const res = await fetch('/api/db/sales', {
@@ -83,9 +292,6 @@ async function registrarVentaSupabase(venta) {
   }
 }
 
-/* =========================================================
-   DESCUENTO DE STOCK
-   ========================================================= */
 async function descontarStockSupabase(items, tenantId) {
   try {
     await fetch('/api/db/products/deduct-stock', {
@@ -94,58 +300,21 @@ async function descontarStockSupabase(items, tenantId) {
       body: JSON.stringify({ tenant_id: tenantId, items }),
     });
   } catch (err) {
-    console.error('descontarStock:', err.message);
+    console.error('[GSP] descontarStock:', err.message);
   }
 }
 
-/* =========================================================
-   SINCRONIZACIÓN INICIAL AL CARGAR LA APP
-   ========================================================= */
-async function syncAllTenantsFromSupabase() {
-  if (typeof STATE === 'undefined') return;
+/* ── Storage stubs (stateless — no-ops) ─────────────────── */
 
-  for (const tenantId of Object.keys(STATE.tenants)) {
-    const productos = await syncInventarioFromSupabase(tenantId);
-    if (productos && productos.length > 0) {
-      const inventario = productos.map(p => ({
-        sku:       p.sku || p.id || '',
-        nombre:    p.name || p.nombre || '',
-        stock:     p.stock || 0,
-        costoUSD:  p.cost_usd || p.costoUSD || 0,
-        precioUSD: p.price_usd || p.precioUSD || 0,
-        moneda:    p.currency || p.moneda || 'USD',
-      }));
-      STATE.tenants[tenantId].inventario = inventario;
-      STATE.tenants[tenantId].productos  = inventario.map(p => ({
-        nombre: p.nombre,
-        precio: p.precioUSD,
-      }));
-    }
+function saveToStorage() {}
+function loadFromStorage() {}
+function resetStorage() { location.reload(); }
 
-    const ventas = await syncVentasFromSupabase(tenantId);
-    if (ventas && ventas.length > 0) {
-      STATE.tenants[tenantId].ventas = ventas.map(v => ({
-        id:         v.id,
-        fecha:      v.created_at,
-        tenantKey:  v.tenant_id,
-        tenantName: STATE.tenants[tenantId]?.name || v.tenant_id,
-        items:      v.items || [],
-        totalUSD:   v.total_usd || 0,
-        totalBS:    v.total_bs || 0,
-        bcv:        v.bcv || 0,
-        metodoPago: v.metodo_pago || '',
-      }));
-    }
+/* ── Boot ───────────────────────────────────────────────── */
+
+initGlobalStateProvider().then(() => {
+  if (typeof render === 'function' && STATE.session) {
+    render();
+    console.log('[GSP] UI refreshed from DB state');
   }
-
-  if (typeof saveToStorage === 'function') saveToStorage();
-  if (typeof render === 'function') render();
-  console.log('[DB] Sincronización inicial completada');
-}
-
-/* =========================================================
-   ARRANQUE
-   ========================================================= */
-initSupabase().then(() => {
-  syncAllTenantsFromSupabase();
 });
