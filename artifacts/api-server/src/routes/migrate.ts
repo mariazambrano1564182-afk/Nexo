@@ -3,6 +3,67 @@ import { pool } from "@workspace/db";
 
 const router = Router();
 
+/* ── Supabase REST helper ───────────────────────────────── */
+
+function getSupabaseBase(): string {
+  const url = process.env.SUPABASE_URL || process.env.VITE_SUPABASE_URL || '';
+  return url.replace(/\/rest\/v1\/?$/, '').replace(/\/$/, '');
+}
+
+async function sbFetch(
+  method: 'GET' | 'POST' | 'PATCH' | 'DELETE',
+  path: string,
+  body?: object
+): Promise<{ ok: boolean; status: number; data: any }> {
+  const base = getSupabaseBase();
+  const key  = process.env.SUPABASE_ANON_KEY || process.env.VITE_SUPABASE_ANON_KEY || '';
+  if (!base || !key) {
+    console.warn('[Supabase] SUPABASE_URL / SUPABASE_ANON_KEY no configurados');
+    return { ok: false, status: 0, data: null };
+  }
+  try {
+    const res = await fetch(`${base}/rest/v1/${path}`, {
+      method,
+      headers: {
+        'Content-Type': 'application/json',
+        'apikey': key,
+        'Authorization': `Bearer ${key}`,
+        'Prefer': method === 'POST' ? 'return=representation' : 'return=minimal',
+      },
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const text = await res.text();
+    let data: any;
+    try { data = JSON.parse(text); } catch { data = text; }
+    if (!res.ok) {
+      console.warn(`[Supabase] ${method} ${path} → ${res.status}`, data);
+    }
+    return { ok: res.ok, status: res.status, data };
+  } catch (e: any) {
+    console.error('[Supabase] fetch error:', e.message);
+    return { ok: false, status: 0, data: null };
+  }
+}
+
+/* Upsert a usuario row to Supabase (by 'usuario' unique field).
+   Note: 'clave' (password) is intentionally excluded from Supabase sync. */
+async function sbUpsertUsuario(u: Record<string, any>) {
+  return sbFetch('POST', 'usuarios?on_conflict=usuario', {
+    nombre:   u.nombre   || '',
+    whatsapp: u.whatsapp || '',
+    usuario:  u.usuario,
+    comercio: u.comercio || '',
+    rol:      u.rol      || 'Operador',
+    estado:   u.estado   || 'Activo',
+    email:    u.email    || '',
+    vistas:   u.vistas,
+  });
+}
+
+async function sbDeleteUsuario(usuarioField: string) {
+  return sbFetch('DELETE', `usuarios?usuario=eq.${encodeURIComponent(usuarioField)}`);
+}
+
 /* ── Seed data ──────────────────────────────────────────── */
 
 const SEED_TENANTS = [
@@ -281,7 +342,10 @@ router.post("/usuarios", async (req: Request, res: Response) => {
        VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
       [nombre, whatsapp||'', usuario, clave||'', comercio||'', rol||'Operador', JSON.stringify(vistas||['dashboard','pos','inventario'])]
     );
-    res.status(201).json(rows[0]);
+    const created = rows[0];
+    const sb = await sbUpsertUsuario(created);
+    console.log(`[Supabase] usuario creado "${usuario}":`, sb.status, sb.ok ? 'OK' : sb.data);
+    res.status(201).json(created);
   } catch (err: any) {
     if (err.code === '23505') { res.status(409).json({ error: "Ese usuario ya existe" }); return; }
     res.status(500).json({ error: err.message });
@@ -308,7 +372,10 @@ router.patch("/usuarios/:id", async (req: Request, res: Response) => {
       vals
     );
     if (!rows[0]) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
-    res.json(rows[0]);
+    const updated = rows[0];
+    const sb = await sbUpsertUsuario(updated);
+    console.log(`[Supabase] usuario actualizado "${updated.usuario}":`, sb.status, sb.ok ? 'OK' : sb.data);
+    res.json(updated);
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
@@ -316,8 +383,31 @@ router.patch("/usuarios/:id", async (req: Request, res: Response) => {
 
 router.delete("/usuarios/:id", async (req: Request, res: Response) => {
   try {
-    await pool.query("DELETE FROM usuarios WHERE id=$1", [req.params.id]);
+    const { rows } = await pool.query("DELETE FROM usuarios WHERE id=$1 RETURNING usuario", [req.params.id]);
+    if (rows[0]?.usuario) {
+      const sb = await sbDeleteUsuario(rows[0].usuario);
+      console.log(`[Supabase] usuario eliminado "${rows[0].usuario}":`, sb.status, sb.ok ? 'OK' : sb.data);
+    }
     res.json({ ok: true });
+  } catch (err: any) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/* ── Sync local → Supabase ──────────────────────────────── */
+
+router.post("/sync-supabase", async (_req: Request, res: Response) => {
+  try {
+    const { rows } = await pool.query("SELECT * FROM usuarios ORDER BY id");
+    const results: { usuario: string; status: number; ok: boolean }[] = [];
+    for (const u of rows) {
+      const sb = await sbUpsertUsuario(u);
+      results.push({ usuario: u.usuario, status: sb.status, ok: sb.ok });
+      console.log(`[Supabase sync] "${u.usuario}" → ${sb.status}`, sb.ok ? 'OK' : sb.data);
+    }
+    const ok    = results.filter(r => r.ok).length;
+    const error = results.filter(r => !r.ok).length;
+    res.json({ synced: ok, errors: error, detail: results });
   } catch (err: any) {
     res.status(500).json({ error: err.message });
   }
