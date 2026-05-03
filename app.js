@@ -34,76 +34,74 @@ async function supabaseLogout() {
 }
 
 /* =========================================================
-   SINCRONIZACIÓN DE INVENTARIO CON SUPABASE
+   SINCRONIZACIÓN DE INVENTARIO — API propia del servidor
    ========================================================= */
 async function syncInventarioFromSupabase(tenantId) {
-  if (!_supabase) return null;
-  const { data, error } = await _supabase
-    .from('products')
-    .select('*')
-    .eq('tenant_id', tenantId);
-  if (error) { console.error('syncInventario:', error.message); return null; }
-  return data;
+  try {
+    const res = await fetch(`/api/db/products?tenant_id=${encodeURIComponent(tenantId)}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.json();
+  } catch (err) {
+    console.error('syncInventario:', err.message);
+    return null;
+  }
 }
 
 async function syncVentasFromSupabase(tenantId) {
-  if (!_supabase) return null;
-  const { data, error } = await _supabase
-    .from('sales')
-    .select('*')
-    .eq('tenant_id', tenantId)
-    .order('created_at', { ascending: false });
-  if (error) { console.error('syncVentas:', error.message); return null; }
-  return data;
+  try {
+    const res = await fetch(`/api/db/sales?tenant_id=${encodeURIComponent(tenantId)}`);
+    if (!res.ok) throw new Error('HTTP ' + res.status);
+    return await res.json();
+  } catch (err) {
+    console.error('syncVentas:', err.message);
+    return null;
+  }
 }
 
 /* =========================================================
-   REGISTRO DE VENTA EN SUPABASE
+   REGISTRO DE VENTA
    ========================================================= */
 async function registrarVentaSupabase(venta) {
-  if (!_supabase) return { error: { message: 'Supabase no configurado' } };
-  const payload = {
-    tenant_id:   venta.tenantKey,
-    items:       venta.items,
-    total_usd:   venta.totalUSD,
-    total_bs:    venta.totalBS,
-    bcv:         venta.bcv,
-    metodo_pago: venta.metodoPago,
-    created_at:  venta.fecha,
-  };
-  const { data, error } = await _supabase.from('sales').insert([payload]).select();
-  return { data, error };
+  try {
+    const res = await fetch('/api/db/sales', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        tenant_id:   venta.tenantKey,
+        items:       venta.items,
+        total_usd:   venta.totalUSD,
+        total_bs:    venta.totalBS,
+        bcv:         venta.bcv,
+        metodo_pago: venta.metodoPago,
+        created_at:  venta.fecha,
+      }),
+    });
+    const data = await res.json();
+    return res.ok ? { data, error: null } : { data: null, error: data };
+  } catch (err) {
+    return { data: null, error: { message: err.message } };
+  }
 }
 
 /* =========================================================
-   DESCUENTO DE STOCK EN SUPABASE
+   DESCUENTO DE STOCK
    ========================================================= */
 async function descontarStockSupabase(items, tenantId) {
-  if (!_supabase) return;
-  for (const it of items) {
-    let query = _supabase.from('products').select('id, stock').eq('tenant_id', tenantId);
-    if (it.sku) {
-      query = query.eq('sku', it.sku);
-    } else {
-      query = query.eq('name', it.nombre);
-    }
-    const { data: rows } = await query.limit(1);
-    const prod = rows && rows[0];
-    if (!prod) continue;
-    const nuevoStock = Math.max(0, (prod.stock || 0) - it.qty);
-    await _supabase
-      .from('products')
-      .update({ stock: nuevoStock, updated_at: new Date().toISOString() })
-      .eq('id', prod.id);
+  try {
+    await fetch('/api/db/products/deduct-stock', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ tenant_id: tenantId, items }),
+    });
+  } catch (err) {
+    console.error('descontarStock:', err.message);
   }
 }
 
 /* =========================================================
    SINCRONIZACIÓN INICIAL AL CARGAR LA APP
-   Se ejecuta después de que la UI haya iniciado.
    ========================================================= */
 async function syncAllTenantsFromSupabase() {
-  if (!_supabase) return;
   if (typeof STATE === 'undefined') return;
 
   for (const tenantId of Object.keys(STATE.tenants)) {
@@ -118,7 +116,7 @@ async function syncAllTenantsFromSupabase() {
         moneda:    p.currency || p.moneda || 'USD',
       }));
       STATE.tenants[tenantId].inventario = inventario;
-      STATE.tenants[tenantId].productos = inventario.map(p => ({
+      STATE.tenants[tenantId].productos  = inventario.map(p => ({
         nombre: p.nombre,
         precio: p.precioUSD,
       }));
@@ -142,11 +140,11 @@ async function syncAllTenantsFromSupabase() {
 
   if (typeof saveToStorage === 'function') saveToStorage();
   if (typeof render === 'function') render();
-  console.log('[Supabase] Sincronización inicial completada');
+  console.log('[DB] Sincronización inicial completada');
 }
 
 /* =========================================================
-   ARRANQUE: inicializar Supabase y sincronizar datos
+   ARRANQUE
    ========================================================= */
 initSupabase().then(() => {
   syncAllTenantsFromSupabase();
