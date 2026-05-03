@@ -529,6 +529,7 @@ const VIEWS = {
     const productosStockBajo = t.inventario.filter(p => p.stock <= STOCK_ALERTA);
 
     // Totales generales
+    const ventasBs = usdToBs(t.kpis.ventasUSD);
     const totalGastosUSD = t.gastos.reduce((acc, g) => acc + (g.moneda === 'USD' ? g.monto : bsToUsd(g.monto)), 0);
     const valorInvUSD = t.inventario.reduce((acc, p) => {
       const costo = p.moneda === 'USD' ? (p.costoUSD || 0) : bsToUsd(p.costoBS || 0);
@@ -641,13 +642,16 @@ const VIEWS = {
         </div>
 
         <div class="glass p-5">
-          <div class="text-[11px] uppercase tracking-widest text-muted mb-1">Resumen financiero</div>
-          <div class="space-y-3 text-sm mt-2">
+          <div class="text-[11px] uppercase tracking-widest text-muted mb-3">Resumen financiero</div>
+          <div class="space-y-3 text-sm">
+            <div class="flex justify-between"><span class="text-muted">Ingresos USD</span><span class="font-semibold">${fmtUSD(t.kpis.ventasUSD)}</span></div>
+            <div class="flex justify-between"><span class="text-muted">Ingresos BS</span><span class="font-semibold">${fmtBS(ventasBs)}</span></div>
+            <div class="divider"></div>
             <div class="flex justify-between"><span class="text-muted">Egresos totales</span><span class="font-semibold">${fmtUSD(totalGastosUSD)}</span></div>
-            <div class="flex justify-between"><span class="text-muted">Valor inventario</span><span class="font-semibold">${fmtUSD(valorInvUSD)}</span></div>
+            <div class="flex justify-between"><span class="text-muted">Valor de inventario</span><span class="font-semibold">${fmtUSD(valorInvUSD)}</span></div>
             <div class="divider"></div>
             <div class="flex justify-between items-end">
-              <span class="text-muted">Utilidad est.</span>
+              <span class="text-muted">Utilidad estimada</span>
               <span class="text-xl font-bold neon-text">${fmtUSD(t.kpis.ventasUSD - totalGastosUSD)}</span>
             </div>
           </div>
