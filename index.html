@@ -629,7 +629,7 @@ const VIEWS = {
           </div>
           <div class="flex gap-2 mt-4">
             <button class="btn btn-ghost flex-1 text-sm" onclick="STATE.cart=[]; renderPOS();">Vaciar</button>
-            <button class="btn btn-primary flex-1 text-sm" onclick="checkout()">Cobrar</button>
+            <button class="btn btn-primary flex-1 text-sm" onclick="openPaymentModal()">Cobrar</button>
           </div>
         </div>
       </div>
@@ -1343,7 +1343,7 @@ function changeQty(i, d) {
   if (STATE.cart[i].qty <= 0) STATE.cart.splice(i,1);
   renderPOS();
 }
-function checkout() {
+function checkout(pagoInfo) {
   if (!STATE.cart.length) { toast('El carrito está vacío'); return; }
   const totalUSD = STATE.cart.reduce((a,c) => a + c.precio * c.qty, 0);
   // Descuento de stock local
@@ -1365,6 +1365,12 @@ function checkout() {
     totalUSD,
     bcv: STATE.bcv,
     totalBS: usdToBs(totalUSD),
+    metodoPago: pagoInfo?.metodo || 'Efectivo USD',
+    montoPagadoUSD: pagoInfo?.montoPagadoUSD ?? totalUSD,
+    montoPagadoBS:  pagoInfo?.montoPagadoBS  ?? usdToBs(totalUSD),
+    vueltoUSD: pagoInfo?.vueltoUSD ?? 0,
+    vueltoBS:  pagoInfo?.vueltoBS  ?? 0,
+    mixto: pagoInfo?.mixto || null,
   };
   tenant().ventas = tenant().ventas || [];
   tenant().ventas.unshift(venta);
@@ -1384,6 +1390,235 @@ function checkout() {
   STATE.cart = [];
   renderPOS();
   openReceiptModal(venta);
+}
+
+/* =========================================================
+   Modal de Pago
+   ========================================================= */
+function openPaymentModal() {
+  if (!STATE.cart.length) { toast('El carrito está vacío'); return; }
+  const totalUSD = STATE.cart.reduce((a,c) => a + c.precio * c.qty, 0);
+  const totalBS  = usdToBs(totalUSD);
+  STATE._pago = { metodo: 'Efectivo USD', totalUSD, totalBS, montoPagadoUSD: 0, montoPagadoBS: 0, vueltoUSD: 0, vueltoBS: 0, mixto: null };
+
+  const root = $('#modal-root');
+  root.innerHTML = `
+    <div class="modal-backdrop" id="modal-backdrop">
+      <div class="glass-strong neon-border w-full" style="max-width:500px;border-radius:16px;max-height:92vh;overflow:auto;">
+        <div class="p-6">
+          <div class="flex items-start justify-between mb-1">
+            <div>
+              <div class="text-[10px] uppercase tracking-[0.25em] text-muted">Cobrar venta</div>
+              <div class="text-2xl font-bold mt-0.5 neon-text">${fmtUSD(totalUSD)}</div>
+              <div class="text-sm text-muted">${fmtBS(totalBS)} · Tasa BCV ${STATE.bcv.toFixed(2)}</div>
+            </div>
+            <button class="btn btn-ghost !py-1 !px-2 text-lg leading-none mt-1" onclick="closeModal()">✕</button>
+          </div>
+
+          <div class="divider my-4"></div>
+
+          <div class="text-[11px] uppercase tracking-widest text-muted mb-2">Método de pago</div>
+          <div class="grid grid-cols-3 sm:grid-cols-5 gap-2 mb-4">
+            ${[
+              { m:'Efectivo USD', icon:'💵' },
+              { m:'Efectivo Bs',  icon:'💴' },
+              { m:'Pago Móvil',  icon:'📱' },
+              { m:'Punto',       icon:'💳' },
+              { m:'Mixto',       icon:'🔀' },
+            ].map(({m,icon}) => `
+              <button class="pago-btn glass btn btn-ghost text-xs !py-2.5 flex flex-col items-center gap-1 ${m==='Efectivo USD'?'neon-border':''}"
+                data-metodo="${m}" onclick="selectMetodoPago(this,'${m}')">
+                <span class="text-base">${icon}</span>
+                <span>${m}</span>
+              </button>
+            `).join('')}
+          </div>
+
+          <div id="pago-detalle" class="space-y-3"></div>
+
+          <div class="flex gap-2 mt-5">
+            <button class="btn btn-ghost flex-1" onclick="closeModal()">Cancelar</button>
+            <button id="btn-confirmar" class="btn btn-primary flex-1" onclick="confirmarPago()">
+              Confirmar cobro
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `;
+  $('#modal-backdrop').addEventListener('click', e => { if (e.target.id==='modal-backdrop') closeModal(); });
+  selectMetodoPago(root.querySelector('[data-metodo="Efectivo USD"]'), 'Efectivo USD');
+}
+
+function selectMetodoPago(btn, metodo) {
+  $$('.pago-btn').forEach(b => b.classList.remove('neon-border'));
+  btn.classList.add('neon-border');
+  STATE._pago.metodo = metodo;
+  const totalUSD = STATE._pago.totalUSD;
+  const totalBS  = STATE._pago.totalBS;
+
+  const det = $('#pago-detalle');
+  if (metodo === 'Efectivo USD') {
+    det.innerHTML = `
+      <div>
+        <div class="text-[11px] uppercase tracking-widest text-muted mb-1">Billete recibido (USD)</div>
+        <div class="flex flex-wrap gap-1.5 mb-2">
+          ${[1,5,10,20,50,100].map(v=>`<button class="btn btn-ghost text-xs !py-1" onclick="setBillete('usd',${v})">${fmtUSD(v)}</button>`).join('')}
+        </div>
+        <input id="inp-monto" class="input" type="number" step="0.01" placeholder="Monto recibido en USD..." oninput="calcVuelto('usd')" />
+      </div>
+      <div id="vuelto-box" class="hidden glass p-3 rounded-xl space-y-1 text-sm">
+        <div class="flex justify-between"><span class="text-muted">Vuelto USD</span><span id="vuelto-usd" class="font-bold neon-text"></span></div>
+        <div class="flex justify-between"><span class="text-muted">Vuelto Bs</span><span id="vuelto-bs" class="font-semibold"></span></div>
+      </div>
+    `;
+  } else if (metodo === 'Efectivo Bs') {
+    det.innerHTML = `
+      <div>
+        <div class="text-[11px] uppercase tracking-widest text-muted mb-1">Billete recibido (Bs)</div>
+        <div class="flex flex-wrap gap-1.5 mb-2">
+          ${[10,50,100,200,500,1000].map(v=>`<button class="btn btn-ghost text-xs !py-1" onclick="setBillete('bs',${v})">Bs ${v}</button>`).join('')}
+        </div>
+        <input id="inp-monto" class="input" type="number" step="0.01" placeholder="Monto recibido en Bs..." oninput="calcVuelto('bs')" />
+      </div>
+      <div id="vuelto-box" class="hidden glass p-3 rounded-xl space-y-1 text-sm">
+        <div class="flex justify-between"><span class="text-muted">Vuelto Bs</span><span id="vuelto-bs" class="font-bold neon-text"></span></div>
+        <div class="flex justify-between"><span class="text-muted">Vuelto USD (ref.)</span><span id="vuelto-usd" class="font-semibold text-muted"></span></div>
+      </div>
+    `;
+  } else if (metodo === 'Mixto') {
+    det.innerHTML = `
+      <div class="text-xs text-muted mb-2">Distribuí el pago entre dos métodos. Total: <span class="neon-text font-semibold">${fmtUSD(totalUSD)}</span></div>
+      <div class="grid grid-cols-2 gap-3">
+        <div>
+          <label class="text-[11px] uppercase tracking-widest text-muted">Efectivo USD</label>
+          <input id="mixto-usd" class="input mt-1" type="number" step="0.01" placeholder="$0.00" oninput="calcMixto()" />
+        </div>
+        <div>
+          <label class="text-[11px] uppercase tracking-widest text-muted">Efectivo Bs</label>
+          <input id="mixto-bs" class="input mt-1" type="number" step="0.01" placeholder="Bs 0.00" oninput="calcMixto()" />
+        </div>
+        <div>
+          <label class="text-[11px] uppercase tracking-widest text-muted">Pago Móvil (Bs)</label>
+          <input id="mixto-pm" class="input mt-1" type="number" step="0.01" placeholder="Bs 0.00" oninput="calcMixto()" />
+        </div>
+        <div>
+          <label class="text-[11px] uppercase tracking-widest text-muted">Punto (USD)</label>
+          <input id="mixto-pt" class="input mt-1" type="number" step="0.01" placeholder="$0.00" oninput="calcMixto()" />
+        </div>
+      </div>
+      <div id="mixto-status" class="glass p-3 rounded-xl text-sm mt-1">
+        <div class="flex justify-between"><span class="text-muted">Total cubierto (USD)</span><span id="mixto-total" class="font-semibold">$0.00</span></div>
+        <div class="flex justify-between mt-1"><span class="text-muted">Restante</span><span id="mixto-rest" class="font-semibold text-amber-400">${fmtUSD(totalUSD)}</span></div>
+      </div>
+    `;
+  } else {
+    det.innerHTML = `
+      <div class="glass p-4 rounded-xl text-sm text-center">
+        <div class="text-muted">Método: <span class="font-semibold text-ink">${metodo}</span></div>
+        <div class="mt-1 text-muted">Total a cobrar: <span class="neon-text font-bold">${fmtUSD(totalUSD)}</span></div>
+      </div>
+    `;
+    STATE._pago.montoPagadoUSD = totalUSD;
+    STATE._pago.montoPagadoBS  = totalBS;
+  }
+}
+
+function setBillete(tipo, val) {
+  const inp = $('#inp-monto');
+  if (!inp) return;
+  inp.value = val;
+  calcVuelto(tipo);
+}
+
+function calcVuelto(tipo) {
+  const inp = $('#inp-monto');
+  if (!inp) return;
+  const monto = Number(inp.value) || 0;
+  const totalUSD = STATE._pago.totalUSD;
+  const totalBS  = STATE._pago.totalBS;
+  const box = $('#vuelto-box');
+
+  if (tipo === 'usd') {
+    const vueltoUSD = monto - totalUSD;
+    const vueltoBS  = usdToBs(vueltoUSD);
+    STATE._pago.montoPagadoUSD = monto;
+    STATE._pago.montoPagadoBS  = usdToBs(monto);
+    STATE._pago.vueltoUSD = Math.max(0, vueltoUSD);
+    STATE._pago.vueltoBS  = Math.max(0, vueltoBS);
+    if (monto > 0 && box) {
+      box.classList.remove('hidden');
+      const usdEl = $('#vuelto-usd'), bsEl = $('#vuelto-bs');
+      if (vueltoUSD >= 0) {
+        if (usdEl) usdEl.textContent = fmtUSD(vueltoUSD);
+        if (bsEl)  bsEl.textContent  = fmtBS(vueltoBS);
+      } else {
+        if (usdEl) usdEl.textContent = `⚠ Faltan ${fmtUSD(-vueltoUSD)}`;
+        if (bsEl)  bsEl.textContent  = '';
+      }
+    }
+  } else {
+    const vueltoBS  = monto - totalBS;
+    const vueltoUSD = bsToUsd(vueltoBS);
+    STATE._pago.montoPagadoBS  = monto;
+    STATE._pago.montoPagadoUSD = bsToUsd(monto);
+    STATE._pago.vueltoBS  = Math.max(0, vueltoBS);
+    STATE._pago.vueltoUSD = Math.max(0, vueltoUSD);
+    if (monto > 0 && box) {
+      box.classList.remove('hidden');
+      const bsEl = $('#vuelto-bs'), usdEl = $('#vuelto-usd');
+      if (vueltoBS >= 0) {
+        if (bsEl)  bsEl.textContent  = fmtBS(vueltoBS);
+        if (usdEl) usdEl.textContent = fmtUSD(vueltoUSD);
+      } else {
+        if (bsEl)  bsEl.textContent  = `⚠ Faltan ${fmtBS(-vueltoBS)}`;
+        if (usdEl) usdEl.textContent = '';
+      }
+    }
+  }
+}
+
+function calcMixto() {
+  const totalUSD = STATE._pago.totalUSD;
+  const usdVal = Number($('#mixto-usd')?.value) || 0;
+  const bsVal  = Number($('#mixto-bs')?.value)  || 0;
+  const pmVal  = Number($('#mixto-pm')?.value)  || 0;
+  const ptVal  = Number($('#mixto-pt')?.value)  || 0;
+  const cubierto = usdVal + ptVal + bsToUsd(bsVal) + bsToUsd(pmVal);
+  const restante = totalUSD - cubierto;
+  const totalEl = $('#mixto-total'), restEl = $('#mixto-rest');
+  if (totalEl) totalEl.textContent = fmtUSD(cubierto);
+  if (restEl) {
+    restEl.textContent = restante <= 0.001 ? '✓ Cubierto' : fmtUSD(Math.max(0, restante));
+    restEl.className = 'font-semibold ' + (restante <= 0.001 ? 'text-emerald-400' : 'text-amber-400');
+  }
+  STATE._pago.mixto = { usd: usdVal, bs: bsVal, pagoMovil: pmVal, punto: ptVal };
+  STATE._pago.montoPagadoUSD = cubierto;
+}
+
+function confirmarPago() {
+  const p = STATE._pago;
+  if (!p) return;
+
+  if (p.metodo === 'Efectivo USD' || p.metodo === 'Efectivo Bs') {
+    if (p.montoPagadoUSD < p.totalUSD - 0.001) {
+      toast('El monto recibido es insuficiente'); return;
+    }
+  } else if (p.metodo === 'Mixto') {
+    if ((p.montoPagadoUSD || 0) < p.totalUSD - 0.001) {
+      toast('El total mixto no cubre el monto a cobrar'); return;
+    }
+  }
+
+  closeModal();
+  checkout({
+    metodo:        p.metodo,
+    montoPagadoUSD: p.montoPagadoUSD,
+    montoPagadoBS:  p.montoPagadoBS,
+    vueltoUSD:     p.vueltoUSD,
+    vueltoBS:      p.vueltoBS,
+    mixto:         p.mixto,
+  });
 }
 
 /* =========================================================
@@ -1437,6 +1672,39 @@ function openReceiptModal(venta) {
               <span class="text-muted">Total BS</span>
               <span class="text-2xl font-bold neon-text">${fmtBS(venta.totalBS)}</span>
             </div>
+          </div>
+
+          <div class="divider"></div>
+
+          <div class="py-3 space-y-1.5 text-sm">
+            <div class="flex justify-between">
+              <span class="text-muted">Método de pago</span>
+              <span class="font-semibold badge-neon px-2 py-0.5 rounded-md text-xs">${venta.metodoPago || 'Efectivo USD'}</span>
+            </div>
+            ${venta.mixto ? `
+              <div class="glass p-2 rounded-lg text-xs space-y-1 mt-1">
+                ${venta.mixto.usd       > 0 ? `<div class="flex justify-between"><span class="text-muted">Efectivo USD</span><span>${fmtUSD(venta.mixto.usd)}</span></div>` : ''}
+                ${venta.mixto.bs        > 0 ? `<div class="flex justify-between"><span class="text-muted">Efectivo Bs</span><span>${fmtBS(venta.mixto.bs)}</span></div>` : ''}
+                ${venta.mixto.pagoMovil > 0 ? `<div class="flex justify-between"><span class="text-muted">Pago Móvil</span><span>${fmtBS(venta.mixto.pagoMovil)}</span></div>` : ''}
+                ${venta.mixto.punto     > 0 ? `<div class="flex justify-between"><span class="text-muted">Punto</span><span>${fmtUSD(venta.mixto.punto)}</span></div>` : ''}
+              </div>
+            ` : ''}
+            ${(venta.metodoPago === 'Efectivo USD' || venta.metodoPago === 'Efectivo Bs') ? `
+              <div class="flex justify-between">
+                <span class="text-muted">Monto recibido</span>
+                <span>${venta.metodoPago === 'Efectivo Bs' ? fmtBS(venta.montoPagadoBS) : fmtUSD(venta.montoPagadoUSD)}</span>
+              </div>
+              ${(venta.vueltoUSD > 0.001 || venta.vueltoBS > 0.001) ? `
+                <div class="flex justify-between font-semibold" style="color:#34d399">
+                  <span>Vuelto</span>
+                  <span>${venta.metodoPago === 'Efectivo Bs' ? fmtBS(venta.vueltoBS) : fmtUSD(venta.vueltoUSD)}</span>
+                </div>
+                ${venta.metodoPago === 'Efectivo USD' && venta.vueltoBS > 0.001 ? `
+                  <div class="flex justify-between text-xs text-muted">
+                    <span>Vuelto en Bs</span><span>${fmtBS(venta.vueltoBS)}</span>
+                  </div>` : ''}
+              ` : ''}
+            ` : ''}
           </div>
 
           <div class="divider"></div>
