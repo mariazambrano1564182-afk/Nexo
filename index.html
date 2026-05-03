@@ -414,6 +414,12 @@ const STATE = {
   ],
   cart: [],
   view: 'dashboard',
+  planes: {
+    basico:      { label: 'Básico',      precio: 9,  desc: '1 usuario · 500 productos' },
+    estandar:    { label: 'Estándar',    precio: 19, desc: '3 usuarios · 2 000 productos' },
+    pro:         { label: 'Pro',         precio: 39, desc: '10 usuarios · ilimitado' },
+    empresarial: { label: 'Empresarial', precio: 79, desc: 'Usuarios ilimitados · API' },
+  },
   infraNotifs: [
     { id: 1, type: 'error',   time: 'Hace 3h',    msg: 'Farmacia Global — Sistema sin actividad desde hace 3 horas' },
     { id: 2, type: 'warning', time: 'Hace 3 días', msg: 'Farmacia Global — Tasa BCV no actualizada hace 3 días' },
@@ -1375,16 +1381,33 @@ const VIEWS = {
         </div>
       </div>
 
-      <div class="glass mt-4 p-5">
-        <div class="text-sm font-semibold mb-3">Tenants registrados</div>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-3">
-          ${Object.entries(STATE.tenants).map(([k,t]) => `
-            <div class="glass p-4 flex items-center justify-between">
+      <div class="mt-4">
+        <div class="text-[11px] uppercase tracking-widest text-muted mb-3">Planes de suscripción</div>
+        <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-4">
+          ${Object.entries(STATE.planes).map(([key, p]) => `
+            <div class="glass p-4 flex flex-col gap-3">
               <div>
-                <div class="font-semibold">${t.name}</div>
-                <div class="text-xs text-muted">${t.type} · ${t.city}</div>
+                <div class="text-xs font-bold uppercase tracking-widest text-neon">${p.label}</div>
+                <div class="text-[11px] text-muted mt-0.5">${p.desc}</div>
               </div>
-              <button class="btn btn-ghost text-xs" onclick="STATE.currentTenant='${k}'; render(); toast('Tenant activo: ${t.name}');">Activar</button>
+              <div class="divider"></div>
+              <div>
+                <label class="text-[10px] uppercase tracking-widest text-muted">Precio USD / mes</label>
+                <div class="flex items-center gap-2 mt-1">
+                  <span class="text-muted text-sm">$</span>
+                  <input id="plan-usd-${key}" type="number" min="0" step="0.01"
+                    value="${p.precio}"
+                    class="input flex-1 text-lg font-bold"
+                    oninput="actualizarPlan('${key}', this.value)" />
+                </div>
+              </div>
+              <div>
+                <label class="text-[10px] uppercase tracking-widest text-muted">Equivalente en Bs</label>
+                <div class="text-xl font-bold neon-text mt-1" id="plan-bs-${key}">
+                  Bs ${(p.precio * STATE.bcv).toLocaleString('es-VE', {minimumFractionDigits:2, maximumFractionDigits:2})}
+                </div>
+              </div>
+              <div class="text-[10px] text-muted">Tasa: Bs ${STATE.bcv.toFixed(2)} / USD</div>
             </div>
           `).join('')}
         </div>
@@ -2266,6 +2289,14 @@ function deleteProduct(idx) {
   saveToStorage();
   toast('Producto eliminado');
   render();
+}
+
+function actualizarPlan(key, valor) {
+  const v = parseFloat(valor);
+  if (isNaN(v) || v < 0) return;
+  STATE.planes[key].precio = v;
+  const bsEl = document.getElementById('plan-bs-' + key);
+  if (bsEl) bsEl.textContent = 'Bs ' + (v * STATE.bcv).toLocaleString('es-VE', {minimumFractionDigits:2, maximumFractionDigits:2});
 }
 
 function suspenderComercio(key) {
