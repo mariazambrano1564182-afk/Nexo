@@ -98,3 +98,10 @@ externalPort = 8081
 
 [nix]
 channel = "stable-25_05"
+
+[userenv]
+
+[userenv.shared]
+VERCEL_TOKEN = "vcp_8dENPSiWPBoDplEw69IXVsY3QtABZGpgYY1Ljs1tGT4roY2C3736MGt8"
+VERCEL_ORG_ID = "d3nMo03i8UKXlQy0VZdEdNpz"
+VERCEL_PROJECT_ID = "prj_h0GkVZkwSFAgUYRNca9vNqUHzpAX"
