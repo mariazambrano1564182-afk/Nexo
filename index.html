@@ -267,20 +267,20 @@
       <!-- Mobile nav -->
       <div class="md:hidden px-3 pb-3 overflow-x-auto scroll-thin">
         <div class="flex gap-2 text-xs">
-          <button data-nav="dashboard" class="nav-item active px-3 py-1.5 rounded-lg text-muted">Dashboard</button>
-          <button data-nav="pos" class="nav-item px-3 py-1.5 rounded-lg text-muted">POS</button>
-          <button data-nav="inventario" class="nav-item px-3 py-1.5 rounded-lg text-muted">Inventario</button>
-          <button data-nav="gastos" class="nav-item px-3 py-1.5 rounded-lg text-muted">Gastos</button>
-          <button data-nav="reportes" class="nav-item px-3 py-1.5 rounded-lg text-muted">Reportes</button>
-          <button data-nav="infraestructura" data-role="admin" class="nav-item px-3 py-1.5 rounded-lg text-muted">Infraestructura</button>
-          <button data-nav="usuarios" data-role="admin" class="nav-item px-3 py-1.5 rounded-lg text-muted">Usuarios</button>
-          <button data-nav="configuracion" data-role="admin" class="nav-item px-3 py-1.5 rounded-lg text-muted">Configuración</button>
+          <button data-nav="dashboard" class="nav-item active whitespace-nowrap px-3 py-1.5 rounded-lg text-muted">Dashboard</button>
+          <button data-nav="pos" class="nav-item whitespace-nowrap px-3 py-1.5 rounded-lg text-muted">POS</button>
+          <button data-nav="inventario" class="nav-item whitespace-nowrap px-3 py-1.5 rounded-lg text-muted">Inventario</button>
+          <button data-nav="gastos" class="nav-item whitespace-nowrap px-3 py-1.5 rounded-lg text-muted">Gastos</button>
+          <button data-nav="reportes" class="nav-item whitespace-nowrap px-3 py-1.5 rounded-lg text-muted">Reportes</button>
+          <button data-nav="infraestructura" data-role="admin" class="nav-item whitespace-nowrap px-3 py-1.5 rounded-lg text-muted">Infraestructura</button>
+          <button data-nav="usuarios" data-role="admin" class="nav-item whitespace-nowrap px-3 py-1.5 rounded-lg text-muted">Usuarios</button>
+          <button data-nav="configuracion" data-role="admin" class="nav-item whitespace-nowrap px-3 py-1.5 rounded-lg text-muted">Configuración</button>
         </div>
       </div>
     </header>
 
     <!-- CONTENT AREA -->
-    <section id="view" class="px-4 md:px-8 py-6 md:py-8 space-y-6"></section>
+    <section id="view" class="px-4 md:px-8 py-6 md:py-8 pb-10 space-y-6"></section>
   </main>
 </div>
 
@@ -731,12 +731,12 @@ const VIEWS = {
     wrap.innerHTML = `
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
         <div class="glass p-5 lg:col-span-2">
-          <div class="flex items-center justify-between mb-4">
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
             <div>
               <div class="text-[11px] uppercase tracking-widest text-muted">Punto de Venta</div>
               <div class="text-lg font-semibold">${t.name}</div>
             </div>
-            <input id="pos-search" type="text" placeholder="Buscar producto..." class="input max-w-xs" />
+            <input id="pos-search" type="text" placeholder="Buscar producto..." class="input w-full sm:max-w-xs" />
           </div>
           <div id="pos-grid" class="grid grid-cols-2 sm:grid-cols-3 gap-3"></div>
         </div>
@@ -773,16 +773,16 @@ const VIEWS = {
           <div class="text-[11px] uppercase tracking-widest text-muted">Inventario multimoneda</div>
           <h2 class="text-xl font-semibold">${t.name}</h2>
         </div>
-        <div class="flex gap-2">
+        <div class="flex flex-wrap gap-2">
           <button class="btn btn-ghost text-sm" onclick="exportInventarioCSV()">Exportar Excel</button>
           <button class="btn btn-ghost text-sm" onclick="exportInventarioPDF()">Exportar PDF</button>
           <button class="btn btn-primary text-sm" id="btn-add-prod">+ Nuevo producto</button>
         </div>
       </div>
 
-      <div class="glass mt-4 overflow-hidden">
-        <div class="table-scroll scroll-thin">
-          <table>
+      <div class="glass mt-4">
+        <div class="overflow-x-auto scroll-thin table-scroll">
+          <table style="min-width:560px">
             <thead>
               <tr>
                 <th>SKU</th><th>Producto</th><th>Stock</th><th>Costo</th><th>Precio USD</th><th>Equivalente BS</th><th></th>
@@ -906,13 +906,13 @@ const VIEWS = {
             <option value="USD">USD</option>
             <option value="BS">BS</option>
           </select>
-          <button class="btn btn-primary md:col-span-6">Registrar gasto</button>
+          <button class="btn btn-primary col-span-1 md:col-span-6">Registrar gasto</button>
         </form>
       </div>
 
-      <div class="glass mt-4 overflow-hidden">
-        <div class="table-scroll scroll-thin">
-          <table>
+      <div class="glass mt-4">
+        <div class="overflow-x-auto scroll-thin table-scroll">
+          <table style="min-width:540px">
             <thead>
               <tr><th>Fecha</th><th>Categoría</th><th>Descripción</th><th>Monto</th><th>Moneda</th><th>Equivalente USD</th><th></th></tr>
             </thead>
@@ -1044,8 +1044,8 @@ const VIEWS = {
         </div>
       </div>
 
-      <div class="glass mt-4 overflow-hidden">
-        <div class="flex items-center justify-between p-5 pb-3">
+      <div class="glass mt-4">
+        <div class="flex items-center justify-between p-5 pb-3 flex-wrap gap-3">
           <div>
             <div class="text-[11px] uppercase tracking-widest text-muted">Histórico de ventas</div>
             <div class="text-lg font-semibold">${ventas.length} recibo(s) · ${fmtUSD(ventasUSD)}</div>
@@ -1055,8 +1055,8 @@ const VIEWS = {
             ${ventas.length ? `<button class="btn btn-danger text-xs" onclick="clearVentas()">Limpiar histórico</button>` : ''}
           </div>
         </div>
-        <div class="table-scroll scroll-thin">
-          <table>
+        <div class="overflow-x-auto scroll-thin table-scroll">
+          <table style="min-width:520px">
             <thead>
               <tr><th>Recibo</th><th>Fecha</th><th>Productos</th><th>Total USD</th><th>Total BS</th><th>BCV</th><th></th></tr>
             </thead>
@@ -1219,12 +1219,12 @@ const VIEWS = {
                     ${t.plan ? `<span class="text-[10px] px-1.5 py-0.5 rounded-md bg-indigo-500/15 text-indigo-300 capitalize">${t.plan}</span>` : ''}
                   </div>
                 </div>
-                <div class="flex gap-1 shrink-0">
-                  <button class="btn btn-ghost !py-1 !px-2 text-[11px]" onclick="suspenderComercio('${k}')">
+                <div class="flex flex-wrap justify-end gap-1 shrink-0 max-w-[130px]">
+                  <button class="btn btn-ghost !py-1 !px-2 text-[10px]" onclick="suspenderComercio('${k}')">
                     ${t.estado==='Activo'?'Suspender':'Activar'}
                   </button>
-                  <button class="btn btn-ghost !py-1 !px-2 text-[11px]" onclick="editarComercio('${k}')">Editar</button>
-                  <button class="btn btn-ghost !py-1 !px-2 text-[11px] text-rose-400" onclick="eliminarComercio('${k}')">Eliminar</button>
+                  <button class="btn btn-ghost !py-1 !px-2 text-[10px]" onclick="editarComercio('${k}')">Editar</button>
+                  <button class="btn btn-ghost !py-1 !px-2 text-[10px] text-rose-400" onclick="eliminarComercio('${k}')">Eliminar</button>
                 </div>
               </div>
             `).join('')}
@@ -1245,12 +1245,12 @@ const VIEWS = {
                   ${u.vistas && u.vistas.length ? `<div class="flex flex-wrap gap-1 mt-1">${u.vistas.map(v=>`<span class="text-[9px] px-1 py-0.5 rounded bg-white/10 text-muted">${v}</span>`).join('')}</div>` : ''}
                   <span class="inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded-md ${u.estado==='Activo'?'bg-emerald-500/15 text-emerald-400':'bg-amber-500/15 text-amber-400'}">${u.estado}</span>
                 </div>
-                <div class="flex gap-1 shrink-0">
-                  <button class="btn btn-ghost !py-1 !px-2 text-[11px]" onclick="suspenderUsuario(${i})">
+                <div class="flex flex-wrap justify-end gap-1 shrink-0 max-w-[130px]">
+                  <button class="btn btn-ghost !py-1 !px-2 text-[10px]" onclick="suspenderUsuario(${i})">
                     ${u.estado==='Activo'?'Suspender':'Activar'}
                   </button>
-                  <button class="btn btn-ghost !py-1 !px-2 text-[11px]" onclick="editarUsuario(${i})">Editar</button>
-                  <button class="btn btn-ghost !py-1 !px-2 text-[11px] text-rose-400" onclick="eliminarUsuario(${i})">Eliminar</button>
+                  <button class="btn btn-ghost !py-1 !px-2 text-[10px]" onclick="editarUsuario(${i})">Editar</button>
+                  <button class="btn btn-ghost !py-1 !px-2 text-[10px] text-rose-400" onclick="eliminarUsuario(${i})">Eliminar</button>
                 </div>
               </div>
             `).join('')}
@@ -1347,19 +1347,19 @@ const VIEWS = {
         <div class="glass p-5">
           <div class="text-sm font-semibold mb-3">Configuración del Super Admin</div>
           <div class="space-y-3 text-sm">
-            <div class="flex items-center justify-between">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
                 <div class="font-medium">Nombre del sistema</div>
                 <div class="text-muted text-xs">Visible en sidebar y reportes</div>
               </div>
-              <input class="input max-w-[200px]" value="Nexo Core V3" />
+              <input class="input w-full sm:max-w-[200px]" value="Nexo Core V3" />
             </div>
-            <div class="flex items-center justify-between">
+            <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2">
               <div>
                 <div class="font-medium">Moneda principal</div>
                 <div class="text-muted text-xs">Para reportes consolidados</div>
               </div>
-              <select class="select max-w-[200px]"><option>USD</option><option>BS</option></select>
+              <select class="select w-full sm:max-w-[200px]"><option>USD</option><option>BS</option></select>
             </div>
             <div class="flex items-center justify-between">
               <div>
