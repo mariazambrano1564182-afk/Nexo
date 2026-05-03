@@ -2,7 +2,8 @@ import { createClient } from "@supabase/supabase-js";
 
 function getClient() {
   const url = (process.env.SUPABASE_URL || "").replace(/\/rest\/v1\/?$/, "").replace(/\/$/, "");
-  return createClient(url, process.env.SUPABASE_ANON_KEY);
+  const key = process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.SUPABASE_ANON_KEY;
+  return createClient(url, key, { auth: { autoRefreshToken: false, persistSession: false } });
 }
 
 export default async function handler(req, res) {
