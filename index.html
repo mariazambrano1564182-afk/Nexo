@@ -356,6 +356,9 @@ const STATE = {
         { fecha: '2026-04-25', categoria: 'Logística', desc: 'Flete proveedor cemento', monto: 120, moneda: 'USD' },
         { fecha: '2026-04-27', categoria: 'Nómina', desc: 'Quincena vendedores', monto: 640, moneda: 'USD' },
       ],
+      rif: 'J-12345678-0',
+      direccion: 'Av. Principal del Centro, Local 4, Urb. El Centro',
+      zonaPostal: '1010',
       ventasMes: [12, 18, 14, 22, 19, 26, 24, 28, 23, 31, 29, 35],
       productos: [
         { nombre: 'Taladro Inalámbrico 18V', precio: 119 },
@@ -387,6 +390,9 @@ const STATE = {
         { fecha: '2026-04-24', categoria: 'Compras', desc: 'Lote antibióticos', monto: 3200, moneda: 'USD' },
         { fecha: '2026-04-26', categoria: 'Nómina', desc: 'Quincena farmacéuticos', monto: 1800, moneda: 'USD' },
       ],
+      rif: 'J-87654321-0',
+      direccion: 'Av. Bolívar Norte, CC Gran Valencia, Local 42',
+      zonaPostal: '2001',
       ventasMes: [22, 25, 27, 30, 28, 33, 35, 38, 36, 41, 44, 47],
       productos: [
         { nombre: 'Acetaminofén 500mg', precio: 2.5 },
@@ -1470,6 +1476,7 @@ function checkout(pagoInfo) {
     vueltoUSD: pagoInfo?.vueltoUSD ?? 0,
     vueltoBS:  pagoInfo?.vueltoBS  ?? 0,
     mixto: pagoInfo?.mixto || null,
+    referencia: pagoInfo?.referencia || null,
   };
   tenant().ventas = tenant().ventas || [];
   tenant().ventas.unshift(venta);
@@ -1611,6 +1618,25 @@ function selectMetodoPago(btn, metodo) {
         <div class="flex justify-between mt-1"><span class="text-muted">Restante</span><span id="mixto-rest" class="font-semibold text-amber-400">${fmtUSD(totalUSD)}</span></div>
       </div>
     `;
+  } else if (metodo === 'Pago Móvil') {
+    det.innerHTML = `
+      <div class="space-y-3">
+        <div class="glass p-3 rounded-xl text-center">
+          <div class="text-[11px] uppercase tracking-widest text-muted mb-1">Monto a recibir vía Pago Móvil</div>
+          <div class="text-2xl font-bold neon-text">${fmtBS(totalBS)}</div>
+          <div class="text-xs text-muted mt-1">(${fmtUSD(totalUSD)} · Tasa ${STATE.bcv.toFixed(2)})</div>
+        </div>
+        <div>
+          <div class="text-[11px] uppercase tracking-widest text-muted mb-1">Referencia bancaria <span class="text-danger">*</span></div>
+          <input id="inp-referencia" class="input" type="text" maxlength="30"
+            placeholder="Ej: 00384729183..." oninput="STATE._pago.referencia=this.value.trim()" />
+          <div class="text-[11px] text-muted mt-1">Número de referencia de la transferencia / pago</div>
+        </div>
+      </div>
+    `;
+    STATE._pago.montoPagadoUSD = totalUSD;
+    STATE._pago.montoPagadoBS  = totalBS;
+    STATE._pago.referencia     = '';
   } else {
     det.innerHTML = `
       <div class="glass p-4 rounded-xl text-sm text-center">
@@ -1707,16 +1733,21 @@ function confirmarPago() {
     if ((p.montoPagadoUSD || 0) < p.totalUSD - 0.001) {
       toast('El total mixto no cubre el monto a cobrar'); return;
     }
+  } else if (p.metodo === 'Pago Móvil') {
+    const ref = ($('#inp-referencia')?.value || '').trim();
+    if (!ref) { toast('Ingresá la referencia bancaria para continuar'); return; }
+    p.referencia = ref;
   }
 
   closeModal();
   checkout({
-    metodo:        p.metodo,
+    metodo:         p.metodo,
     montoPagadoUSD: p.montoPagadoUSD,
     montoPagadoBS:  p.montoPagadoBS,
-    vueltoUSD:     p.vueltoUSD,
-    vueltoBS:      p.vueltoBS,
-    mixto:         p.mixto,
+    vueltoUSD:      p.vueltoUSD,
+    vueltoBS:       p.vueltoBS,
+    mixto:          p.mixto,
+    referencia:     p.referencia || null,
   });
 }
 
@@ -1725,97 +1756,129 @@ function confirmarPago() {
    ========================================================= */
 function openReceiptModal(venta) {
   const root = $('#modal-root');
+  const t = tenant();
   const fecha = new Date(venta.fecha);
-  const fechaStr = fecha.toLocaleDateString('es-VE') + ' · ' + fecha.toLocaleTimeString('es-VE', {hour:'2-digit', minute:'2-digit'});
+  const fechaDDMMYYYY = fecha.toLocaleDateString('es-VE', {day:'2-digit', month:'2-digit', year:'numeric'}).replace(/\//g,'-');
+  const horaHHMM = fecha.toLocaleTimeString('es-VE', {hour:'2-digit', minute:'2-digit', hour12:false});
+  const numFact = venta.id.replace('V-','').padStart(8,'0');
+
+  // IVA 16% incluido en precio
+  const baseImp = venta.totalBS / 1.16;
+  const ivaAmt  = venta.totalBS - baseImp;
+
+  // Helper: format BS in Venezuelan style for ticket (Bs X,XX)
+  const tbs = n => 'Bs ' + Number(n).toLocaleString('es-VE', {minimumFractionDigits:2, maximumFractionDigits:2});
+  const DASH = '- - - - - - - - - - - - - - - - - - - -';
+
+  // Build items rows
+  const itemsHTML = venta.items.map(it => {
+    const unitBS  = it.precio * venta.bcv;
+    const totalBS = unitBS * it.qty;
+    return `
+      <div class="ticket-row"><span>${it.qty} x ${tbs(unitBS)}</span></div>
+      <div class="ticket-row"><span class="ticket-name">${it.nombre.toUpperCase()}</span><span>${tbs(totalBS)}</span></div>
+    `;
+  }).join('');
+
+  // Payment line
+  const metodo = venta.metodoPago || 'Efectivo USD';
+  let pagoLineas = '';
+  if (venta.mixto) {
+    if (venta.mixto.usd       > 0) pagoLineas += `<div class="ticket-row"><span>Efectivo USD</span><span>${tbs(venta.mixto.usd * venta.bcv)}</span></div>`;
+    if (venta.mixto.bs        > 0) pagoLineas += `<div class="ticket-row"><span>Efectivo Bs</span><span>${tbs(venta.mixto.bs)}</span></div>`;
+    if (venta.mixto.pagoMovil > 0) pagoLineas += `<div class="ticket-row"><span>Pago Movil</span><span>${tbs(venta.mixto.pagoMovil)}</span></div>`;
+    if (venta.mixto.punto     > 0) pagoLineas += `<div class="ticket-row"><span>Punto</span><span>${tbs(venta.mixto.punto * venta.bcv)}</span></div>`;
+  } else {
+    const pagoLabel = metodo === 'Efectivo USD' ? 'Efectivo USD' : metodo === 'Efectivo Bs' ? 'Efectivo Bs' : metodo === 'Pago Móvil' ? 'Pago Movil' : metodo === 'Punto' ? 'Tarjeta Debito' : metodo;
+    pagoLineas += `<div class="ticket-row"><span>${pagoLabel}</span><span>${tbs(venta.montoPagadoBS || venta.totalBS)}</span></div>`;
+    if (venta.referencia) {
+      pagoLineas += `<div class="ticket-row"><span>Ref: ${venta.referencia}</span><span></span></div>`;
+    }
+  }
+  const cambioBS = Math.max(0, (venta.montoPagadoBS || venta.totalBS) - venta.totalBS);
+  const totalItems = venta.items.reduce((a,c) => a + c.qty, 0);
+
   root.innerHTML = `
     <div class="modal-backdrop" id="modal-backdrop">
-      <div class="glass-strong modal-card neon-border" id="print-area">
-        <div class="p-6">
-          <div class="flex items-start justify-between mb-4">
-            <div>
-              <div class="text-[10px] uppercase tracking-[0.25em] text-muted">Recibo de venta</div>
-              <div class="text-xl font-bold mt-0.5">${venta.tenantName}</div>
-              <div class="text-xs text-muted">Nexo Core V3 · ${fechaStr}</div>
-            </div>
-            <div class="text-right">
-              <div class="text-[10px] uppercase tracking-[0.2em] text-muted">N°</div>
-              <div class="font-mono text-sm neon-text">${venta.id}</div>
-            </div>
+      <div style="background:#111827;border:1px solid rgba(255,255,255,0.1);border-radius:16px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,0.6)">
+
+        <!-- Ticket area -->
+        <div id="print-area" style="background:#fff;color:#111;font-family:'Courier New',Courier,monospace;font-size:12px;line-height:1.55;padding:20px 24px;">
+          <style>
+            .ticket-center { text-align:center; }
+            .ticket-bold   { font-weight:bold; }
+            .ticket-row    { display:flex; justify-content:space-between; }
+            .ticket-name   { flex:1; padding-right:8px; }
+            .ticket-dash   { color:#999; margin:4px 0; font-size:11px; }
+            @media print {
+              #modal-root > div { display:none; }
+              #print-area { display:block !important; position:fixed; inset:0; padding:12px; background:#fff; }
+              .no-print { display:none !important; }
+            }
+          </style>
+
+          <div class="ticket-center ticket-bold">* SENIAT</div>
+          <div class="ticket-center">${t.rif || 'J-00000000-0'}</div>
+          <div class="ticket-center ticket-bold">${venta.tenantName.toUpperCase()}</div>
+          <div class="ticket-center" style="font-size:11px">${(t.direccion || '').toUpperCase()}</div>
+          <div class="ticket-center" style="font-size:11px">${t.city ? t.city.toUpperCase() + ', VENEZUELA' : 'VENEZUELA'}</div>
+          <div class="ticket-center" style="font-size:11px">ZONA POSTAL ${t.zonaPostal || '0000'}</div>
+
+          <div style="margin:6px 0 2px">RAZON SOCIAL:CLIENTE GENERICO</div>
+          <div>CI/RIF:NO CI NO RIF</div>
+          <div>CAJA1/Cajero:POS</div>
+
+          <div class="ticket-center ticket-bold" style="margin:8px 0 4px;font-size:14px;">FACTURA</div>
+
+          <div class="ticket-row">
+            <span>FACTURA</span>
+            <span>${numFact}</span>
+          </div>
+          <div class="ticket-row">
+            <span>FECHA:${fechaDDMMYYYY}</span>
+            <span>HORA:${horaHHMM}</span>
           </div>
 
-          <div class="divider"></div>
+          <div class="ticket-dash">${DASH}</div>
 
-          <div class="py-3">
-            <div class="grid grid-cols-12 text-[10px] uppercase tracking-widest text-muted mb-2">
-              <div class="col-span-6">Producto</div>
-              <div class="col-span-2 text-center">Cant.</div>
-              <div class="col-span-2 text-right">P.U.</div>
-              <div class="col-span-2 text-right">Subt.</div>
-            </div>
-            ${venta.items.map(it => `
-              <div class="grid grid-cols-12 text-sm py-1.5">
-                <div class="col-span-6 truncate">${it.nombre}</div>
-                <div class="col-span-2 text-center">${it.qty}</div>
-                <div class="col-span-2 text-right">${fmtUSD(it.precio)}</div>
-                <div class="col-span-2 text-right font-semibold">${fmtUSD(it.precio * it.qty)}</div>
-              </div>
-            `).join('')}
+          ${itemsHTML}
+
+          <div class="ticket-dash">${DASH}</div>
+
+          <div class="ticket-row">
+            <span>BI G(16,00%)</span>
+            <span>${tbs(baseImp)}</span>
+          </div>
+          <div class="ticket-row">
+            <span>IVA G(16,00%)</span>
+            <span>${tbs(ivaAmt)}</span>
           </div>
 
-          <div class="divider"></div>
+          <div class="ticket-dash">${DASH}</div>
 
-          <div class="py-3 space-y-1.5 text-sm">
-            <div class="flex justify-between text-muted"><span>Tasa BCV aplicada</span><span>Bs ${venta.bcv.toFixed(2)} / USD</span></div>
-            <div class="flex justify-between"><span class="text-muted">Total USD</span><span class="font-semibold">${fmtUSD(venta.totalUSD)}</span></div>
-            <div class="flex justify-between items-end pt-1">
-              <span class="text-muted">Total BS</span>
-              <span class="text-2xl font-bold neon-text">${fmtBS(venta.totalBS)}</span>
-            </div>
+          <div class="ticket-row ticket-bold" style="font-size:14px;margin:2px 0">
+            <span>TOTAL</span>
+            <span>${tbs(venta.totalBS)}</span>
           </div>
 
-          <div class="divider"></div>
+          ${pagoLineas}
 
-          <div class="py-3 space-y-1.5 text-sm">
-            <div class="flex justify-between">
-              <span class="text-muted">Método de pago</span>
-              <span class="font-semibold badge-neon px-2 py-0.5 rounded-md text-xs">${venta.metodoPago || 'Efectivo USD'}</span>
-            </div>
-            ${venta.mixto ? `
-              <div class="glass p-2 rounded-lg text-xs space-y-1 mt-1">
-                ${venta.mixto.usd       > 0 ? `<div class="flex justify-between"><span class="text-muted">Efectivo USD</span><span>${fmtUSD(venta.mixto.usd)}</span></div>` : ''}
-                ${venta.mixto.bs        > 0 ? `<div class="flex justify-between"><span class="text-muted">Efectivo Bs</span><span>${fmtBS(venta.mixto.bs)}</span></div>` : ''}
-                ${venta.mixto.pagoMovil > 0 ? `<div class="flex justify-between"><span class="text-muted">Pago Móvil</span><span>${fmtBS(venta.mixto.pagoMovil)}</span></div>` : ''}
-                ${venta.mixto.punto     > 0 ? `<div class="flex justify-between"><span class="text-muted">Punto</span><span>${fmtUSD(venta.mixto.punto)}</span></div>` : ''}
-              </div>
-            ` : ''}
-            ${(venta.metodoPago === 'Efectivo USD' || venta.metodoPago === 'Efectivo Bs') ? `
-              <div class="flex justify-between">
-                <span class="text-muted">Monto recibido</span>
-                <span>${venta.metodoPago === 'Efectivo Bs' ? fmtBS(venta.montoPagadoBS) : fmtUSD(venta.montoPagadoUSD)}</span>
-              </div>
-              ${(venta.vueltoUSD > 0.001 || venta.vueltoBS > 0.001) ? `
-                <div class="flex justify-between font-semibold" style="color:#34d399">
-                  <span>Vuelto</span>
-                  <span>${venta.metodoPago === 'Efectivo Bs' ? fmtBS(venta.vueltoBS) : fmtUSD(venta.vueltoUSD)}</span>
-                </div>
-                ${venta.metodoPago === 'Efectivo USD' && venta.vueltoBS > 0.001 ? `
-                  <div class="flex justify-between text-xs text-muted">
-                    <span>Vuelto en Bs</span><span>${fmtBS(venta.vueltoBS)}</span>
-                  </div>` : ''}
-              ` : ''}
-            ` : ''}
+          <div class="ticket-row">
+            <span>CAMBIO</span>
+            <span>${tbs(cambioBS)}</span>
           </div>
+          <div>Cantidad:${totalItems}</div>
+          <div style="margin-top:2px">${t.manager ? t.manager.split(' ').map(w=>w[0]).join('').toUpperCase() : 'POS'}</div>
 
-          <div class="divider"></div>
-
-          <div class="text-center text-[11px] text-muted py-3">
-            Gracias por su compra · Documento simulado · No fiscal
+          <div class="ticket-center" style="margin-top:10px;font-size:10px;color:#666;">
+            Gracias por su compra<br>Documento no fiscal
           </div>
+        </div>
 
-          <div class="flex gap-2 no-print">
-            <button class="btn btn-ghost flex-1 text-sm" onclick="closeModal()">Cerrar</button>
-            <button class="btn btn-primary flex-1 text-sm" onclick="window.print()">Imprimir</button>
-          </div>
+        <!-- Buttons -->
+        <div class="no-print" style="padding:12px 16px;display:flex;gap:8px;">
+          <button class="btn btn-ghost flex-1 text-sm" onclick="closeModal()">Cerrar</button>
+          <button class="btn btn-primary flex-1 text-sm" onclick="window.print()">Imprimir</button>
         </div>
       </div>
     </div>
