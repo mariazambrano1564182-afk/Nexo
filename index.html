@@ -1800,10 +1800,13 @@ function openReceiptModal(venta) {
 
   root.innerHTML = `
     <div class="modal-backdrop" id="modal-backdrop">
-      <div style="background:#111827;border:1px solid rgba(255,255,255,0.1);border-radius:16px;width:100%;max-width:460px;max-height:90vh;overflow-y:auto;box-shadow:0 25px 60px rgba(0,0,0,0.6);position:relative;">
+      <div style="background:#111827;border:1px solid rgba(255,255,255,0.1);border-radius:16px;width:100%;max-width:460px;box-shadow:0 25px 60px rgba(0,0,0,0.6);overflow:hidden;">
 
-        <!-- X close button -->
-        <button onclick="closeModal()" class="no-print" style="position:absolute;top:10px;right:12px;z-index:10;background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#f8fafc;width:30px;height:30px;border-radius:8px;font-size:16px;line-height:1;cursor:pointer;display:flex;align-items:center;justify-content:center;" title="Cerrar">✕</button>
+        <!-- Header bar with X -->
+        <div class="no-print" style="display:flex;align-items:center;justify-content:space-between;padding:10px 14px 10px 16px;border-bottom:1px solid rgba(255,255,255,0.08);">
+          <span style="font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:rgba(255,255,255,0.4);">Factura</span>
+          <button onclick="closeModal()" style="background:rgba(255,255,255,0.08);border:1px solid rgba(255,255,255,0.15);color:#f8fafc;width:28px;height:28px;border-radius:7px;font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;line-height:1;" title="Cerrar">✕</button>
+        </div>
 
         <!-- Ticket area -->
         <div id="print-area" style="background:#fff;color:#111;font-family:'Courier New',Courier,monospace;font-size:12px;line-height:1.55;padding:20px 24px;">
