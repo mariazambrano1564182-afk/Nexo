@@ -415,10 +415,10 @@ const STATE = {
   cart: [],
   view: 'dashboard',
   planes: {
-    basico:      { label: 'Básico',      precio: 9,  desc: '1 usuario · 500 productos' },
-    estandar:    { label: 'Estándar',    precio: 19, desc: '3 usuarios · 2 000 productos' },
-    pro:         { label: 'Pro',         precio: 39, desc: '10 usuarios · ilimitado' },
-    empresarial: { label: 'Empresarial', precio: 79, desc: 'Usuarios ilimitados · API' },
+    basico:      { label: 'Básico',      precio: 9,  desc: '1 usuario · 500 productos',             features: ['POS','Inventario'] },
+    estandar:    { label: 'Estándar',    precio: 19, desc: '3 usuarios · 2 000 productos',           features: ['POS','Inventario','Gastos'] },
+    pro:         { label: 'Pro',         precio: 39, desc: '10 usuarios · productos ilimitados',     features: ['POS','Inventario','Gastos','Reportes','Dashboard'] },
+    empresarial: { label: 'Empresarial', precio: 79, desc: 'Usuarios ilimitados · API',              features: ['POS','Inventario','Gastos','Reportes','Dashboard','Usuarios','Configuración','Infraestructura'] },
   },
   infraNotifs: [
     { id: 1, type: 'error',   time: 'Hace 3h',    msg: 'Farmacia Global — Sistema sin actividad desde hace 3 horas' },
@@ -1130,18 +1130,16 @@ const VIEWS = {
             <div>
               <label class="text-[11px] uppercase tracking-widest text-muted mb-2 block">Plan</label>
               <div class="grid grid-cols-2 gap-2">
-                ${[
-                  { val:'basico',      label:'Básico',      precio:'$9/mes',   desc:'1 usuario · 500 productos' },
-                  { val:'estandar',    label:'Estándar',    precio:'$19/mes',  desc:'3 usuarios · 2 000 productos' },
-                  { val:'pro',         label:'Pro',         precio:'$39/mes',  desc:'10 usuarios · ilimitado' },
-                  { val:'empresarial', label:'Empresarial', precio:'$79/mes',  desc:'Usuarios ilimitados · API' },
-                ].map((p,i) => `
+                ${Object.entries(STATE.planes).map(([val, p], i) => `
                   <label class="relative flex flex-col gap-0.5 rounded-xl border border-line/30 p-2.5 cursor-pointer
                     hover:border-neon/40 transition-colors has-[:checked]:border-neon/70 has-[:checked]:bg-neon/5">
-                    <input type="radio" name="plan" value="${p.val}" class="absolute opacity-0 w-0 h-0" ${i===0?'checked':''} required />
+                    <input type="radio" name="plan" value="${val}" class="absolute opacity-0 w-0 h-0" ${i===0?'checked':''} required />
                     <span class="text-xs font-semibold">${p.label}</span>
-                    <span class="text-[10px] text-neon font-medium">${p.precio}</span>
+                    <span class="text-[10px] text-neon font-medium">$${p.precio}/mes</span>
                     <span class="text-[10px] text-muted leading-tight">${p.desc}</span>
+                    <div class="flex flex-wrap gap-0.5 mt-1">
+                      ${p.features.map(f=>`<span class="text-[8px] px-1 py-0.5 rounded bg-white/10 text-muted">${f}</span>`).join('')}
+                    </div>
                   </label>
                 `).join('')}
               </div>
@@ -1389,6 +1387,9 @@ const VIEWS = {
               <div>
                 <div class="text-xs font-bold uppercase tracking-widest text-neon">${p.label}</div>
                 <div class="text-[11px] text-muted mt-0.5">${p.desc}</div>
+              </div>
+              <div class="flex flex-wrap gap-1">
+                ${p.features.map(f => `<span class="text-[9px] px-1.5 py-0.5 rounded-md bg-white/10 text-muted">${f}</span>`).join('')}
               </div>
               <div class="divider"></div>
               <div>
