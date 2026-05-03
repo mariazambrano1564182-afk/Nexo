@@ -1156,10 +1156,6 @@ const VIEWS = {
             <div class="text-sm text-muted pb-1">Bs / USD</div>
           </div>
           <div class="text-xs text-muted mt-1">Aplicada a todos los comercios</div>
-          <form id="infra-form-bcv" class="flex gap-2 mt-3">
-            <input class="input !py-1 text-sm" type="number" step="0.01" name="bcv" value="${STATE.bcv}" required />
-            <button class="btn btn-primary !py-1 text-xs whitespace-nowrap">Actualizar</button>
-          </form>
         </div>
 
         <!-- SaaS Revenue -->
@@ -1273,15 +1269,7 @@ const VIEWS = {
       </div>
     `;
 
-    wrap.querySelector('#infra-form-bcv').addEventListener('submit', e => {
-      e.preventDefault();
-      const v = Number(new FormData(e.target).get('bcv'));
-      if (!v || v <= 0) return;
-      STATE.bcv = v;
-      saveToStorage();
-      toast(`Tasa BCV actualizada a Bs ${v.toFixed(2)} / USD`);
-      render();
-    });
+
 
     return wrap;
   },
