@@ -511,32 +511,124 @@ function render() {
 const VIEWS = {
   dashboard() {
     const t = tenant();
-    const ventasBs = usdToBs(t.kpis.ventasUSD);
+    const hoy = new Date().toLocaleDateString('es-VE');
+
+    // Ventas del día
+    const ventasHoy = (t.ventas || []).filter(v => new Date(v.fecha).toLocaleDateString('es-VE') === hoy);
+    const ventasDiaUSD = ventasHoy.reduce((a, v) => a + v.totalUSD, 0);
+
+    // Gastos del día
+    const gastosHoy = (t.gastos || []).filter(g => {
+      const d = new Date(g.fecha).toLocaleDateString('es-VE');
+      return d === hoy;
+    });
+    const gastosDiaUSD = gastosHoy.reduce((a, g) => a + (g.moneda === 'USD' ? g.monto : bsToUsd(g.monto)), 0);
+
+    // Stock bajo (≤ 5 unidades)
+    const STOCK_ALERTA = 5;
+    const productosStockBajo = t.inventario.filter(p => p.stock <= STOCK_ALERTA);
+
+    // Totales generales
     const totalGastosUSD = t.gastos.reduce((acc, g) => acc + (g.moneda === 'USD' ? g.monto : bsToUsd(g.monto)), 0);
     const valorInvUSD = t.inventario.reduce((acc, p) => {
-      const costo = p.moneda === 'USD' ? p.costoUSD : bsToUsd(p.costoBS);
+      const costo = p.moneda === 'USD' ? (p.costoUSD || 0) : bsToUsd(p.costoBS || 0);
       return acc + costo * p.stock;
     }, 0);
 
+    // Distribución por método de pago (todas las ventas registradas)
+    const metodosConfig = [
+      { key: 'Efectivo USD', label: 'Efectivo USD', color: '#00f2ff' },
+      { key: 'Efectivo Bs',  label: 'Efectivo Bs',  color: '#34d399' },
+      { key: 'Pago Móvil',  label: 'Pago Móvil',   color: '#fbbf24' },
+      { key: 'Punto',       label: 'Punto',          color: '#a78bfa' },
+      { key: 'Mixto',       label: 'Mixto',          color: '#fb7185' },
+    ];
+    const todasLasVentas = t.ventas || [];
+    const totalVentasUSD = todasLasVentas.reduce((a, v) => a + v.totalUSD, 0);
+    const metodosData = metodosConfig.map(m => {
+      const ventas = todasLasVentas.filter(v => (v.metodoPago || 'Efectivo USD') === m.key);
+      const total = ventas.reduce((a, v) => a + v.totalUSD, 0);
+      const pct = totalVentasUSD > 0 ? Math.round((total / totalVentasUSD) * 100) : 0;
+      return { ...m, count: ventas.length, totalUSD: total, pct };
+    });
+    // Si no hay ventas registradas, mostrar distribución demo
+    const sinVentas = totalVentasUSD === 0;
+    const demoMetodos = [
+      { key: 'Efectivo USD', label: 'Efectivo USD', color: '#00f2ff',  count: 14, totalUSD: 820,  pct: 42 },
+      { key: 'Efectivo Bs',  label: 'Efectivo Bs',  color: '#34d399',  count: 8,  totalUSD: 390,  pct: 20 },
+      { key: 'Pago Móvil',  label: 'Pago Móvil',   color: '#fbbf24',  count: 10, totalUSD: 480,  pct: 24 },
+      { key: 'Punto',       label: 'Punto',          color: '#a78bfa',  count: 4,  totalUSD: 220,  pct: 11 },
+      { key: 'Mixto',       label: 'Mixto',          color: '#fb7185',  count: 1,  totalUSD: 60,   pct: 3  },
+    ];
+    const metodos = sinVentas ? demoMetodos : metodosData.filter(m => m.count > 0);
+
     const wrap = document.createElement('div');
     wrap.innerHTML = `
-      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
-        ${kpiCard('Ventas del mes', fmtUSD(t.kpis.ventasUSD), fmtBS(ventasBs), 'up', '+12.4%')}
-        ${kpiCard('Ticket promedio', fmtUSD(t.kpis.ticketProm), fmtBS(usdToBs(t.kpis.ticketProm)), 'up', '+3.1%')}
-        ${kpiCard('Productos activos', t.kpis.productos.toLocaleString(), t.type, 'flat', '')}
-        ${kpiCard('Clientes únicos', t.kpis.clientes.toLocaleString(), 'Últimos 30 días', 'up', '+8.7%')}
-        <div class="glass p-4 flex flex-col justify-between neon-border">
-          <div>
-            <div class="text-[11px] uppercase tracking-widest text-muted">Tasa BCV vigente</div>
-            <div class="flex items-end justify-between mt-2">
-              <div class="text-2xl font-bold neon-text"><span id="bcv-side">${STATE.bcv.toFixed(2)}</span></div>
-              <div class="text-[11px] text-muted pb-1">Bs / USD</div>
+      <!-- TOP CARDS -->
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+
+        <!-- Ventas del día -->
+        <div class="glass p-5">
+          <div class="flex items-center justify-between">
+            <div class="text-[11px] uppercase tracking-widest text-muted">Ventas del día</div>
+            <svg class="w-4 h-4 text-emerald-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 6 13.5 15.5 8.5 10.5 1 18"/><polyline points="17 6 23 6 23 12"/></svg>
+          </div>
+          <div class="mt-2 text-2xl font-bold text-emerald-400" style="text-shadow:0 0 12px rgba(52,211,153,.35)">${ventasHoy.length > 0 ? fmtUSD(ventasDiaUSD) : '$0.00'}</div>
+          <div class="text-xs text-muted mt-1">${ventasHoy.length} transacción${ventasHoy.length !== 1 ? 'es' : ''} hoy · ${fmtBS(usdToBs(ventasDiaUSD))}</div>
+        </div>
+
+        <!-- Gastos del día -->
+        <div class="glass p-5">
+          <div class="flex items-center justify-between">
+            <div class="text-[11px] uppercase tracking-widest text-muted">Gastos del día</div>
+            <svg class="w-4 h-4 text-rose-400" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polyline points="23 18 13.5 8.5 8.5 13.5 1 6"/><polyline points="17 18 23 18 23 12"/></svg>
+          </div>
+          <div class="mt-2 text-2xl font-bold text-rose-400" style="text-shadow:0 0 12px rgba(244,63,94,.35)">${gastosDiaUSD > 0 ? fmtUSD(gastosDiaUSD) : '$0.00'}</div>
+          <div class="text-xs text-muted mt-1">${gastosHoy.length} egreso${gastosHoy.length !== 1 ? 's' : ''} hoy · ${fmtBS(usdToBs(gastosDiaUSD))}</div>
+        </div>
+
+        <!-- Alerta stock bajo -->
+        <div class="glass p-5 ${productosStockBajo.length > 0 ? 'border border-amber-400/40' : ''}">
+          <div class="flex items-center justify-between">
+            <div class="text-[11px] uppercase tracking-widest text-muted">Alerta stock bajo</div>
+            <svg class="w-4 h-4 ${productosStockBajo.length > 0 ? 'text-amber-400' : 'text-emerald-400'}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>
+          </div>
+          <div class="mt-2 text-2xl font-bold ${productosStockBajo.length > 0 ? 'text-amber-400' : 'text-emerald-400'}"
+               style="text-shadow:0 0 12px ${productosStockBajo.length > 0 ? 'rgba(251,191,36,.35)' : 'rgba(52,211,153,.35)'}">
+            ${productosStockBajo.length}
+          </div>
+          <div class="text-xs text-muted mt-1">${productosStockBajo.length > 0 ? `producto${productosStockBajo.length !== 1 ? 's' : ''} con ≤${STOCK_ALERTA} unidades` : 'Stock en niveles normales'}</div>
+          ${productosStockBajo.length > 0 ? `
+            <div class="mt-2 space-y-0.5">
+              ${productosStockBajo.slice(0,3).map(p => `
+                <div class="flex justify-between text-[11px]">
+                  <span class="text-muted truncate max-w-[120px]">${p.nombre}</span>
+                  <span class="font-semibold text-amber-400">${p.stock} uds</span>
+                </div>
+              `).join('')}
+              ${productosStockBajo.length > 3 ? `<div class="text-[10px] text-muted">+${productosStockBajo.length - 3} más</div>` : ''}
             </div>
+          ` : ''}
+        </div>
+
+        <!-- Tasa BCV -->
+        <div class="glass p-5 neon-border">
+          <div class="text-[11px] uppercase tracking-widest text-muted">Tasa BCV vigente</div>
+          <div class="flex items-end gap-2 mt-2">
+            <div class="text-2xl font-bold neon-text"><span id="bcv-side">${STATE.bcv.toFixed(2)}</span></div>
+            <div class="text-[11px] text-muted pb-1">Bs / USD</div>
+          </div>
+          <div class="text-xs text-muted mt-1">Aplicada a todas las conversiones</div>
+          <div class="divider my-3"></div>
+          <div class="flex justify-between text-xs">
+            <span class="text-muted">$100 USD =</span>
+            <span class="font-semibold">${fmtBS(usdToBs(100))}</span>
           </div>
         </div>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-6">
+      <!-- CHARTS ROW -->
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4 mt-5">
         <div class="glass p-5 lg:col-span-2">
           <div class="flex items-center justify-between mb-4">
             <div>
@@ -549,27 +641,27 @@ const VIEWS = {
         </div>
 
         <div class="glass p-5">
-          <div class="text-[11px] uppercase tracking-widest text-muted mb-3">Resumen financiero</div>
-          <div class="space-y-3 text-sm">
-            <div class="flex justify-between"><span class="text-muted">Ingresos USD</span><span class="font-semibold">${fmtUSD(t.kpis.ventasUSD)}</span></div>
-            <div class="flex justify-between"><span class="text-muted">Ingresos BS</span><span class="font-semibold">${fmtBS(ventasBs)}</span></div>
-            <div class="divider"></div>
+          <div class="text-[11px] uppercase tracking-widest text-muted mb-1">Resumen financiero</div>
+          <div class="space-y-3 text-sm mt-2">
             <div class="flex justify-between"><span class="text-muted">Egresos totales</span><span class="font-semibold">${fmtUSD(totalGastosUSD)}</span></div>
-            <div class="flex justify-between"><span class="text-muted">Valor de inventario</span><span class="font-semibold">${fmtUSD(valorInvUSD)}</span></div>
+            <div class="flex justify-between"><span class="text-muted">Valor inventario</span><span class="font-semibold">${fmtUSD(valorInvUSD)}</span></div>
             <div class="divider"></div>
             <div class="flex justify-between items-end">
-              <span class="text-muted">Utilidad estimada</span>
+              <span class="text-muted">Utilidad est.</span>
               <span class="text-xl font-bold neon-text">${fmtUSD(t.kpis.ventasUSD - totalGastosUSD)}</span>
             </div>
           </div>
         </div>
       </div>
 
-      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-6">
+      <!-- BOTTOM ROW: top products + payment method chart -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-5">
+
+        <!-- Top productos -->
         <div class="glass p-5">
           <div class="flex items-center justify-between mb-3">
             <div class="text-sm font-semibold">Top productos · ${t.type}</div>
-            <span class="text-[11px] text-muted">Precio en USD</span>
+            <span class="text-[11px] text-muted">USD · BS</span>
           </div>
           <div class="space-y-2">
             ${t.productos.slice(0,5).map(p => `
@@ -581,18 +673,36 @@ const VIEWS = {
           </div>
         </div>
 
+        <!-- Métodos de pago chart -->
         <div class="glass p-5">
-          <div class="text-sm font-semibold mb-3">Información del tenant</div>
-          <div class="grid grid-cols-2 gap-3 text-sm">
-            <div><div class="text-muted text-xs">Razón social</div><div class="font-medium">${t.name}</div></div>
-            <div><div class="text-muted text-xs">Tipo</div><div class="font-medium">${t.type}</div></div>
-            <div><div class="text-muted text-xs">Ciudad</div><div class="font-medium">${t.city}</div></div>
-            <div><div class="text-muted text-xs">Gerente</div><div class="font-medium">${t.manager}</div></div>
-            <div class="col-span-2 mt-2 glass p-3">
-              <div class="text-[11px] uppercase tracking-widest text-muted">Tasa BCV aplicada</div>
-              <div class="text-lg font-bold neon-text mt-1">Bs ${STATE.bcv.toFixed(2)} <span class="text-muted text-xs font-normal">/ USD</span></div>
+          <div class="flex items-center justify-between mb-4">
+            <div>
+              <div class="text-[11px] uppercase tracking-widest text-muted">Distribución de ventas</div>
+              <div class="text-sm font-semibold mt-0.5">Por método de pago</div>
             </div>
+            ${sinVentas ? '<span class="text-[10px] text-muted badge-neon px-2 py-0.5 rounded-md">Demo</span>' : `<span class="badge-neon text-[11px] px-2 py-1 rounded-md">${todasLasVentas.length} ventas</span>`}
           </div>
+          <div class="space-y-3">
+            ${metodos.map(m => `
+              <div>
+                <div class="flex items-center justify-between text-xs mb-1">
+                  <div class="flex items-center gap-1.5">
+                    <div class="w-2 h-2 rounded-full shrink-0" style="background:${m.color};box-shadow:0 0 6px ${m.color}88"></div>
+                    <span>${m.label}</span>
+                  </div>
+                  <div class="flex items-center gap-2">
+                    <span class="text-muted">${m.count} venta${m.count !== 1 ? 's' : ''}</span>
+                    <span class="font-semibold">${fmtUSD(m.totalUSD)}</span>
+                    <span class="text-muted w-8 text-right">${m.pct}%</span>
+                  </div>
+                </div>
+                <div class="h-1.5 rounded-full" style="background:rgba(255,255,255,0.06)">
+                  <div class="h-1.5 rounded-full" style="width:${Math.max(m.pct,2)}%;background:${m.color};box-shadow:0 0 8px ${m.color}66;transition:width .4s ease"></div>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+          ${sinVentas ? '<div class="text-[11px] text-muted mt-3 text-center">Registrá ventas en el POS para ver datos reales</div>' : ''}
         </div>
       </div>
     `;
