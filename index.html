@@ -1152,6 +1152,28 @@ const VIEWS = {
                 ${comercioOptions}
               </select>
             </div>
+            <div>
+              <label class="text-[11px] uppercase tracking-widest text-muted mb-2 block">Vistas permitidas</label>
+              <div class="grid grid-cols-2 gap-x-4 gap-y-1.5 rounded-xl bg-white/5 p-3">
+                ${[
+                  ['dashboard',      'Dashboard'],
+                  ['pos',            'Punto de Venta'],
+                  ['inventario',     'Inventario'],
+                  ['gastos',         'Gastos'],
+                  ['reportes',       'Reportes'],
+                  ['usuarios',       'Usuarios'],
+                  ['configuracion',  'Configuración'],
+                  ['infraestructura','Infraestructura'],
+                ].map(([val, label]) => `
+                  <label class="flex items-center gap-2 text-xs cursor-pointer select-none">
+                    <input type="checkbox" name="vistas" value="${val}"
+                      class="accent-[#00f5d4] w-3.5 h-3.5 rounded"
+                      ${['dashboard','pos','inventario'].includes(val) ? 'checked' : ''} />
+                    <span class="text-muted">${label}</span>
+                  </label>
+                `).join('')}
+              </div>
+            </div>
             <button class="btn btn-primary w-full mt-1">+ Registrar Usuario</button>
           </form>
         </div>
@@ -1194,6 +1216,7 @@ const VIEWS = {
                   <div class="text-[11px] text-muted truncate">
                     ${u.whatsapp||u.email||'—'} · ${u.comercio==='all'?'Todos':(STATE.tenants[u.comercio]?.name||u.comercio)}
                   </div>
+                  ${u.vistas && u.vistas.length ? `<div class="flex flex-wrap gap-1 mt-1">${u.vistas.map(v=>`<span class="text-[9px] px-1 py-0.5 rounded bg-white/10 text-muted">${v}</span>`).join('')}</div>` : ''}
                   <span class="inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded-md ${u.estado==='Activo'?'bg-emerald-500/15 text-emerald-400':'bg-amber-500/15 text-amber-400'}">${u.estado}</span>
                 </div>
                 <div class="flex gap-1 shrink-0">
@@ -1245,6 +1268,8 @@ const VIEWS = {
       if (STATE.usuarios.find(u => u.usuario === usuario)) {
         toast('Ese nombre de usuario ya existe'); return;
       }
+      const vistas = fd.getAll('vistas').map(v => v.toString());
+      if (vistas.length === 0) { toast('Selecciona al menos una vista'); return; }
       STATE.usuarios.push({
         nombre,
         whatsapp: fd.get('whatsapp').toString().trim(),
@@ -1254,6 +1279,7 @@ const VIEWS = {
         rol: 'Operador',
         estado: 'Activo',
         email: '',
+        vistas,
       });
       e.target.reset();
       toast(`Usuario "${nombre}" registrado`);
