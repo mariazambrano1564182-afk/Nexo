@@ -1080,41 +1080,186 @@ const VIEWS = {
   },
 
   usuarios() {
+    // Ensure all tenants have estado
+    Object.values(STATE.tenants).forEach(t => { if (!t.estado) t.estado = 'Activo'; });
+    // Ensure all usuarios have estado
+    STATE.usuarios.forEach(u => { if (!u.estado) u.estado = 'Activo'; });
+
+    const comercioOptions = Object.entries(STATE.tenants)
+      .map(([k,t]) => `<option value="${k}">${t.name}</option>`).join('');
+
+    const tiposComercio = ['Ferretería','Farmacia','Bodega','Restaurante','Carnicería','Panadería','Librería','Otro'];
+
     const wrap = document.createElement('div');
     wrap.innerHTML = `
-      <div class="flex flex-col md:flex-row md:items-end md:justify-between gap-4">
-        <div>
-          <div class="text-[11px] uppercase tracking-widest text-muted">Gestión de usuarios</div>
-          <h2 class="text-xl font-semibold">Acceso por comercio</h2>
+      <div class="text-[11px] uppercase tracking-widest text-muted mb-1">Gestión de usuarios y comercios</div>
+      <h2 class="text-xl font-semibold mb-4">Administración de acceso</h2>
+
+      <!-- TOP: two forms -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+
+        <!-- Registrar Comercio -->
+        <div class="glass p-5">
+          <div class="text-[11px] uppercase tracking-widest text-muted mb-3">Registrar Comercio</div>
+          <form id="form-comercio" class="space-y-3">
+            <div>
+              <label class="text-[11px] uppercase tracking-widest text-muted">Nombre</label>
+              <input name="nombre" class="input w-full mt-1" placeholder="Nombre del comercio" required />
+            </div>
+            <div>
+              <label class="text-[11px] uppercase tracking-widest text-muted">RIF</label>
+              <input name="rif" class="input w-full mt-1" placeholder="J-XXXXXXXX-X" required />
+            </div>
+            <div>
+              <label class="text-[11px] uppercase tracking-widest text-muted">Dirección</label>
+              <input name="direccion" class="input w-full mt-1" placeholder="Dirección del local" required />
+            </div>
+            <div>
+              <label class="text-[11px] uppercase tracking-widest text-muted">Tipo de comercio</label>
+              <select name="tipo" class="input w-full mt-1" required>
+                <option value="">Seleccionar tipo...</option>
+                ${tiposComercio.map(t=>`<option>${t}</option>`).join('')}
+              </select>
+            </div>
+            <button class="btn btn-primary w-full mt-1">+ Registrar Comercio</button>
+          </form>
         </div>
-        <button class="btn btn-primary text-sm" onclick="toast('Modal de invitación (simulado)')">+ Invitar usuario</button>
+
+        <!-- Registrar Usuario -->
+        <div class="glass p-5">
+          <div class="text-[11px] uppercase tracking-widest text-muted mb-3">Registrar Usuario</div>
+          <form id="form-usuario" class="space-y-3">
+            <div>
+              <label class="text-[11px] uppercase tracking-widest text-muted">Nombre completo</label>
+              <input name="nombre" class="input w-full mt-1" placeholder="Nombre y apellido" required />
+            </div>
+            <div>
+              <label class="text-[11px] uppercase tracking-widest text-muted">WhatsApp</label>
+              <input name="whatsapp" class="input w-full mt-1" placeholder="+58 4XX XXX XXXX" required />
+            </div>
+            <div>
+              <label class="text-[11px] uppercase tracking-widest text-muted">Usuario</label>
+              <input name="usuario" class="input w-full mt-1" placeholder="Nombre de usuario" required />
+            </div>
+            <div>
+              <label class="text-[11px] uppercase tracking-widest text-muted">Clave</label>
+              <input name="clave" type="password" class="input w-full mt-1" placeholder="Contraseña" required />
+            </div>
+            <div>
+              <label class="text-[11px] uppercase tracking-widest text-muted">Comercio asociado</label>
+              <select name="comercio" class="input w-full mt-1" required>
+                <option value="">Seleccionar comercio...</option>
+                ${comercioOptions}
+              </select>
+            </div>
+            <button class="btn btn-primary w-full mt-1">+ Registrar Usuario</button>
+          </form>
+        </div>
       </div>
 
-      <div class="glass mt-4 overflow-hidden">
-        <div class="overflow-x-auto scroll-thin">
-          <table>
-            <thead>
-              <tr><th>Usuario</th><th>Email</th><th>Rol</th><th>Comercio</th><th>Estado</th><th></th></tr>
-            </thead>
-            <tbody>
-              ${STATE.usuarios.map(u => `
-                <tr>
-                  <td class="font-medium flex items-center gap-3">
-                    <div class="w-8 h-8 rounded-full bg-gradient-to-br from-neon/30 to-indigo-500/30 border border-line/40 flex items-center justify-center text-xs font-bold">${u.nombre.split(' ').map(s=>s[0]).slice(0,2).join('')}</div>
-                    ${u.nombre}
-                  </td>
-                  <td class="text-muted">${u.email}</td>
-                  <td><span class="badge-neon text-[10px] px-2 py-1 rounded-md">${u.rol}</span></td>
-                  <td>${u.comercio === 'all' ? '<span class="text-muted">Todos</span>' : STATE.tenants[u.comercio].name}</td>
-                  <td><span class="inline-flex items-center gap-2 text-xs"><span class="pulse-dot"></span>${u.estado}</span></td>
-                  <td class="text-right"><button class="btn btn-ghost text-xs">Editar</button></td>
-                </tr>
-              `).join('')}
-            </tbody>
-          </table>
+      <!-- BOTTOM: two tables -->
+      <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mt-5">
+
+        <!-- Comercios registrados -->
+        <div class="glass p-5">
+          <div class="text-[11px] uppercase tracking-widest text-muted mb-3">Comercios registrados <span class="ml-1 badge-neon px-1.5 py-0.5 rounded text-[10px]">${Object.keys(STATE.tenants).length}</span></div>
+          <div class="space-y-2" id="lista-comercios">
+            ${Object.entries(STATE.tenants).map(([k,t]) => `
+              <div class="flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/5 gap-3">
+                <div class="min-w-0">
+                  <div class="text-sm font-medium truncate">${t.name}</div>
+                  <div class="text-[11px] text-muted truncate">${t.rif||'—'} · ${t.type} · ${t.city||'—'}</div>
+                  <span class="inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded-md ${t.estado==='Activo'?'bg-emerald-500/15 text-emerald-400':'bg-amber-500/15 text-amber-400'}">${t.estado}</span>
+                </div>
+                <div class="flex gap-1 shrink-0">
+                  <button class="btn btn-ghost !py-1 !px-2 text-[11px]" onclick="suspenderComercio('${k}')">
+                    ${t.estado==='Activo'?'Suspender':'Activar'}
+                  </button>
+                  <button class="btn btn-ghost !py-1 !px-2 text-[11px]" onclick="editarComercio('${k}')">Editar</button>
+                  <button class="btn btn-ghost !py-1 !px-2 text-[11px] text-rose-400" onclick="eliminarComercio('${k}')">Eliminar</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
         </div>
+
+        <!-- Usuarios registrados -->
+        <div class="glass p-5">
+          <div class="text-[11px] uppercase tracking-widest text-muted mb-3">Usuarios registrados <span class="ml-1 badge-neon px-1.5 py-0.5 rounded text-[10px]">${STATE.usuarios.length}</span></div>
+          <div class="space-y-2" id="lista-usuarios">
+            ${STATE.usuarios.map((u,i) => `
+              <div class="flex items-center justify-between px-3 py-2.5 rounded-xl bg-white/5 gap-3">
+                <div class="min-w-0">
+                  <div class="text-sm font-medium truncate">${u.nombre}</div>
+                  <div class="text-[11px] text-muted truncate">
+                    ${u.whatsapp||u.email||'—'} · ${u.comercio==='all'?'Todos':(STATE.tenants[u.comercio]?.name||u.comercio)}
+                  </div>
+                  <span class="inline-block mt-0.5 text-[10px] px-1.5 py-0.5 rounded-md ${u.estado==='Activo'?'bg-emerald-500/15 text-emerald-400':'bg-amber-500/15 text-amber-400'}">${u.estado}</span>
+                </div>
+                <div class="flex gap-1 shrink-0">
+                  <button class="btn btn-ghost !py-1 !px-2 text-[11px]" onclick="suspenderUsuario(${i})">
+                    ${u.estado==='Activo'?'Suspender':'Activar'}
+                  </button>
+                  <button class="btn btn-ghost !py-1 !px-2 text-[11px]" onclick="editarUsuario(${i})">Editar</button>
+                  <button class="btn btn-ghost !py-1 !px-2 text-[11px] text-rose-400" onclick="eliminarUsuario(${i})">Eliminar</button>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+
       </div>
     `;
+
+    // Form: Registrar Comercio
+    wrap.querySelector('#form-comercio').addEventListener('submit', e => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const nombre = fd.get('nombre').toString().trim();
+      const key = nombre.toLowerCase().replace(/\s+/g,'_').replace(/[^a-z0-9_]/g,'') + '_' + Date.now().toString(36);
+      STATE.tenants[key] = {
+        name: nombre,
+        rif: fd.get('rif').toString().trim(),
+        direccion: fd.get('direccion').toString().trim(),
+        type: fd.get('tipo').toString(),
+        city: '',
+        manager: '',
+        estado: 'Activo',
+        kpis: { ventasUSD: 0, ticketProm: 0, productos: 0, clientes: 0 },
+        inventario: [], gastos: [], ventas: [],
+        ventasMes: [0,0,0,0,0,0,0,0,0,0,0,0],
+        productos: [],
+        zonaPostal: '',
+      };
+      e.target.reset();
+      toast(`Comercio "${nombre}" registrado`);
+      render();
+    });
+
+    // Form: Registrar Usuario
+    wrap.querySelector('#form-usuario').addEventListener('submit', e => {
+      e.preventDefault();
+      const fd = new FormData(e.target);
+      const nombre = fd.get('nombre').toString().trim();
+      const usuario = fd.get('usuario').toString().trim();
+      if (STATE.usuarios.find(u => u.usuario === usuario)) {
+        toast('Ese nombre de usuario ya existe'); return;
+      }
+      STATE.usuarios.push({
+        nombre,
+        whatsapp: fd.get('whatsapp').toString().trim(),
+        usuario,
+        clave: fd.get('clave').toString(),
+        comercio: fd.get('comercio').toString(),
+        rol: 'Operador',
+        estado: 'Activo',
+        email: '',
+      });
+      e.target.reset();
+      toast(`Usuario "${nombre}" registrado`);
+      render();
+    });
+
     return wrap;
   },
 
@@ -2071,6 +2216,65 @@ function deleteProduct(idx) {
   tenant().productos = tenant().productos.filter(p => p.nombre !== removed.nombre);
   saveToStorage();
   toast('Producto eliminado');
+  render();
+}
+
+function suspenderComercio(key) {
+  const t = STATE.tenants[key];
+  if (!t) return;
+  t.estado = t.estado === 'Activo' ? 'Suspendido' : 'Activo';
+  toast(`Comercio "${t.name}" ${t.estado.toLowerCase()}`);
+  render();
+}
+function eliminarComercio(key) {
+  const t = STATE.tenants[key];
+  if (!t) return;
+  if (!confirm(`¿Eliminar "${t.name}"? Esta acción no se puede deshacer.`)) return;
+  delete STATE.tenants[key];
+  toast(`Comercio eliminado`);
+  render();
+}
+function editarComercio(key) {
+  const t = STATE.tenants[key];
+  if (!t) return;
+  const nombre = prompt('Nombre del comercio:', t.name);
+  if (nombre === null) return;
+  const rif = prompt('RIF:', t.rif || '');
+  if (rif === null) return;
+  const dir = prompt('Dirección:', t.direccion || '');
+  if (dir === null) return;
+  t.name = nombre.trim() || t.name;
+  t.rif  = rif.trim();
+  t.direccion = dir.trim();
+  toast(`Comercio actualizado`);
+  render();
+}
+
+function suspenderUsuario(i) {
+  const u = STATE.usuarios[i];
+  if (!u) return;
+  u.estado = u.estado === 'Activo' ? 'Suspendido' : 'Activo';
+  toast(`Usuario "${u.nombre}" ${u.estado.toLowerCase()}`);
+  render();
+}
+function eliminarUsuario(i) {
+  const u = STATE.usuarios[i];
+  if (!u) return;
+  if (!confirm(`¿Eliminar usuario "${u.nombre}"?`)) return;
+  STATE.usuarios.splice(i, 1);
+  toast(`Usuario eliminado`);
+  render();
+}
+function editarUsuario(i) {
+  const u = STATE.usuarios[i];
+  if (!u) return;
+  const nombre = prompt('Nombre completo:', u.nombre);
+  if (nombre === null) return;
+  const wa = prompt('WhatsApp:', u.whatsapp || '');
+  if (wa === null) return;
+  u.nombre    = nombre.trim() || u.nombre;
+  u.whatsapp  = wa.trim();
+  toast(`Usuario actualizado`);
   render();
 }
 
