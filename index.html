@@ -2552,17 +2552,48 @@ function hideLogin() {
 }
 
 function loginAttempt(user, pass) {
-  const u = USERS[user.trim().toLowerCase()];
-  if (!u || u.pass !== pass) return false;
-  STATE.session = {
-    user: user.trim().toLowerCase(),
-    role: u.role,
-    name: u.name,
-    tenantKey: u.tenantKey,
-    loggedAt: Date.now()
-  };
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(STATE.session));
-  return true;
+  const userKey = user.trim().toLowerCase();
+
+  // 1. Hardcoded accounts (admin + demo)
+  const hardcoded = USERS[userKey];
+  if (hardcoded && hardcoded.pass === pass) {
+    STATE.session = {
+      user: userKey,
+      role: hardcoded.role,
+      name: hardcoded.name,
+      tenantKey: hardcoded.tenantKey,
+      loggedAt: Date.now()
+    };
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(STATE.session));
+    return true;
+  }
+
+  // 2. DB usuarios (cargados desde PostgreSQL al iniciar)
+  const dbUser = (STATE.usuarios || []).find(
+    u => u.usuario.toLowerCase() === userKey && u.clave === pass && u.estado === 'Activo'
+  );
+  if (dbUser) {
+    const isAdmin = dbUser.rol === 'Super Admin';
+    const tenantKey = (dbUser.comercio === 'all' || !dbUser.comercio) ? null : dbUser.comercio;
+    STATE.session = {
+      user: dbUser.usuario,
+      role: isAdmin ? 'admin' : 'client',
+      name: dbUser.nombre,
+      tenantKey: isAdmin ? null : tenantKey,
+      vistas: dbUser.vistas || null,
+      loggedAt: Date.now()
+    };
+    // Si el rol es cliente, fijar el tenant activo
+    if (!isAdmin && tenantKey && STATE.tenants[tenantKey]) {
+      STATE.currentTenant = tenantKey;
+    } else if (!isAdmin && !tenantKey && Object.keys(STATE.tenants).length > 0) {
+      STATE.currentTenant = Object.keys(STATE.tenants)[0];
+    }
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(STATE.session));
+    return true;
+  }
+
+  return false;
 }
 
 function restoreSession() {
