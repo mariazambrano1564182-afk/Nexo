@@ -2494,11 +2494,6 @@ document.addEventListener('change', e => {
    ========================================================= */
 const SESSION_KEY = 'nexo_core_v3_session';
 
-const USERS = {
-  'admin':      { pass: 'nexo2026',   role: 'admin',  name: 'Super Admin',          tenantKey: null },
-  'ferreteria': { pass: 'cliente123', role: 'client', name: 'Ferretería El Centro', tenantKey: 'ferreteria' }
-};
-
 function isAdmin() { return STATE.session && STATE.session.role === 'admin'; }
 
 function applySessionToUI() {
@@ -2551,18 +2546,31 @@ function hideLogin() {
   app.classList.remove('hidden');
 }
 
-function loginAttempt(user, pass) {
-  const u = USERS[user.trim().toLowerCase()];
-  if (!u || u.pass !== pass) return false;
-  STATE.session = {
-    user: user.trim().toLowerCase(),
-    role: u.role,
-    name: u.name,
-    tenantKey: u.tenantKey,
-    loggedAt: Date.now()
-  };
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(STATE.session));
-  return true;
+async function loginAttempt(user, pass) {
+  try {
+    const res = await fetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ usuario: user.trim(), clave: pass })
+    });
+    if (!res.ok) return false;
+    const u = await res.json();
+    const isSuperAdmin = u.rol === 'Super Admin' || u.comercio === 'all';
+    STATE.session = {
+      user: u.usuario,
+      role: isSuperAdmin ? 'admin' : 'client',
+      name: u.nombre,
+      tenantKey: isSuperAdmin ? null : u.comercio,
+      rol: u.rol,
+      vistas: u.vistas || ['dashboard','pos','inventario'],
+      loggedAt: Date.now()
+    };
+    sessionStorage.setItem(SESSION_KEY, JSON.stringify(STATE.session));
+    return true;
+  } catch (err) {
+    console.error('[Login] Error:', err.message);
+    return false;
+  }
 }
 
 function restoreSession() {
@@ -2591,13 +2599,17 @@ function prefillLogin(user, pass) {
   f.querySelector('[name="pass"]').focus();
 }
 
-document.getElementById('form-login').addEventListener('submit', e => {
+document.getElementById('form-login').addEventListener('submit', async e => {
   e.preventDefault();
   const fd = new FormData(e.target);
   const user = (fd.get('user') || '').toString();
   const pass = (fd.get('pass') || '').toString();
   const errEl = document.getElementById('login-error');
-  if (loginAttempt(user, pass)) {
+  const btn = e.target.querySelector('button');
+  if (btn) { btn.disabled = true; btn.textContent = 'Verificando...'; }
+  const ok = await loginAttempt(user, pass);
+  if (btn) { btn.disabled = false; btn.textContent = 'Ingresar'; }
+  if (ok) {
     errEl.classList.add('hidden');
     hideLogin();
     applySessionToUI();

@@ -1,9 +1,7 @@
 import { Router, type Request, type Response } from "express";
-import { pool } from "@workspace/db";
+import { supabase } from "../lib/supabase";
 
 const router = Router();
-
-/* ── Seed data ──────────────────────────────────────────── */
 
 const SEED_TENANTS = [
   {
@@ -27,10 +25,10 @@ const SEED_TENANTS = [
       { sku:'FE-006', nombre:'Llave Inglesa 12"',           stock:18,  costoUSD:9,   precioUSD:17,  moneda:'USD' },
     ],
     gastos: [
-      { fecha:'2026-04-22', categoria:'Alquiler',   desc:'Local comercial Abril',      monto:850,  moneda:'USD' },
-      { fecha:'2026-04-23', categoria:'Servicios',  desc:'Electricidad CORPOELEC',     monto:1200, moneda:'BS'  },
-      { fecha:'2026-04-25', categoria:'Logística',  desc:'Flete proveedor cemento',    monto:120,  moneda:'USD' },
-      { fecha:'2026-04-27', categoria:'Nómina',     desc:'Quincena vendedores',        monto:640,  moneda:'USD' },
+      { fecha:'2026-04-22', categoria:'Alquiler',  desc:'Local comercial Abril',   monto:850,  moneda:'USD' },
+      { fecha:'2026-04-23', categoria:'Servicios', desc:'Electricidad CORPOELEC',  monto:1200, moneda:'BS'  },
+      { fecha:'2026-04-25', categoria:'Logística', desc:'Flete proveedor cemento', monto:120,  moneda:'USD' },
+      { fecha:'2026-04-27', categoria:'Nómina',    desc:'Quincena vendedores',     monto:640,  moneda:'USD' },
     ],
     ventas: [],
     ventas_mes: [12,18,14,22,19,26,24,28,23,31,29,35],
@@ -64,10 +62,10 @@ const SEED_TENANTS = [
       { sku:'FA-006', nombre:'Mascarilla Quirúrgica x50',stock:420, costoUSD:2.5, precioUSD:5.5, moneda:'USD' },
     ],
     gastos: [
-      { fecha:'2026-04-20', categoria:'Alquiler',  desc:'Local farmacia Abril',         monto:1400, moneda:'USD' },
-      { fecha:'2026-04-22', categoria:'Servicios', desc:'Internet + telefonía',         monto:95,   moneda:'USD' },
-      { fecha:'2026-04-24', categoria:'Compras',   desc:'Lote antibióticos',            monto:3200, moneda:'USD' },
-      { fecha:'2026-04-26', categoria:'Nómina',    desc:'Quincena farmacéuticos',       monto:1800, moneda:'USD' },
+      { fecha:'2026-04-20', categoria:'Alquiler',  desc:'Local farmacia Abril',   monto:1400, moneda:'USD' },
+      { fecha:'2026-04-22', categoria:'Servicios', desc:'Internet + telefonía',   monto:95,   moneda:'USD' },
+      { fecha:'2026-04-24', categoria:'Compras',   desc:'Lote antibióticos',      monto:3200, moneda:'USD' },
+      { fecha:'2026-04-26', categoria:'Nómina',    desc:'Quincena farmacéuticos', monto:1800, moneda:'USD' },
     ],
     ventas: [],
     ventas_mes: [22,25,27,30,28,33,35,38,36,41,44,47],
@@ -84,100 +82,33 @@ const SEED_TENANTS = [
 
 const SEED_USUARIOS = [
   { nombre:'Luis Hernández',  whatsapp:'', usuario:'luis',   clave:'', comercio:'ferreteria', rol:'Gerente',      estado:'Activo', email:'luis@nexo.io',   vistas:['dashboard','pos','inventario','gastos','reportes'] },
-  { nombre:'Carla Pérez',     whatsapp:'', usuario:'carla',  clave:'', comercio:'ferreteria', rol:'Vendedor',     estado:'Activo', email:'carla@nexo.io',  vistas:['dashboard','pos','inventario'] },
   { nombre:'María Rodríguez', whatsapp:'', usuario:'maria',  clave:'', comercio:'farmacia',   rol:'Gerente',      estado:'Activo', email:'maria@nexo.io',  vistas:['dashboard','pos','inventario','gastos','reportes'] },
-  { nombre:'Daniel Torres',   whatsapp:'', usuario:'daniel', clave:'', comercio:'farmacia',   rol:'Farmacéutico', estado:'Activo', email:'daniel@nexo.io', vistas:['dashboard','pos','inventario'] },
-  { nombre:'Andrés Vega',     whatsapp:'', usuario:'andres', clave:'', comercio:'all',        rol:'Super Admin',  estado:'Activo', email:'andres@nexo.io', vistas:['dashboard','pos','inventario','gastos','reportes','usuarios','configuracion','infraestructura'] },
+  { nombre:'Andrés Vega',     whatsapp:'', usuario:'andres', clave:'nexo2026', comercio:'all', rol:'Super Admin', estado:'Activo', email:'andres@nexo.io', vistas:['dashboard','pos','inventario','gastos','reportes','usuarios','configuracion','infraestructura'] },
 ];
-
-/* ── Migration endpoint ─────────────────────────────────── */
 
 router.post("/migrate", async (_req: Request, res: Response) => {
   try {
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS tenants (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL,
-        rif TEXT NOT NULL DEFAULT '',
-        direccion TEXT NOT NULL DEFAULT '',
-        type TEXT NOT NULL DEFAULT 'Otro',
-        plan TEXT NOT NULL DEFAULT 'basico',
-        city TEXT NOT NULL DEFAULT '',
-        manager TEXT NOT NULL DEFAULT '',
-        estado TEXT NOT NULL DEFAULT 'Activo',
-        zona_postal TEXT NOT NULL DEFAULT '0000',
-        kpis JSONB NOT NULL DEFAULT '{"ventasUSD":0,"ticketProm":0,"productos":0,"clientes":0}'::jsonb,
-        inventario JSONB NOT NULL DEFAULT '[]'::jsonb,
-        gastos JSONB NOT NULL DEFAULT '[]'::jsonb,
-        ventas JSONB NOT NULL DEFAULT '[]'::jsonb,
-        ventas_mes JSONB NOT NULL DEFAULT '[0,0,0,0,0,0,0,0,0,0,0,0]'::jsonb,
-        productos JSONB NOT NULL DEFAULT '[]'::jsonb,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
+    // Seed global_config
+    await supabase
+      .from("global_config")
+      .upsert({ key: "tasa_bcv", value: 36.50 }, { onConflict: "key", ignoreDuplicates: true });
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS usuarios (
-        id SERIAL PRIMARY KEY,
-        nombre TEXT NOT NULL,
-        whatsapp TEXT NOT NULL DEFAULT '',
-        usuario TEXT NOT NULL UNIQUE,
-        clave TEXT NOT NULL DEFAULT '',
-        comercio TEXT NOT NULL DEFAULT '',
-        rol TEXT NOT NULL DEFAULT 'Operador',
-        estado TEXT NOT NULL DEFAULT 'Activo',
-        email TEXT NOT NULL DEFAULT '',
-        vistas JSONB NOT NULL DEFAULT '["dashboard","pos","inventario"]'::jsonb,
-        created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
+    // Seed tenants only if none exist
+    const { count: tenantCount } = await supabase
+      .from("tenants")
+      .select("*", { count: "exact", head: true });
 
-    await pool.query(`
-      CREATE TABLE IF NOT EXISTS global_config (
-        key TEXT PRIMARY KEY,
-        value NUMERIC NOT NULL,
-        updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
-      )
-    `);
-
-    await pool.query(`
-      INSERT INTO global_config (key, value) VALUES ('tasa_bcv', 36.50)
-      ON CONFLICT (key) DO NOTHING
-    `);
-
-    const { rows: existingTenants } = await pool.query("SELECT id FROM tenants LIMIT 1");
-    if (existingTenants.length === 0) {
-      for (const t of SEED_TENANTS) {
-        await pool.query(
-          `INSERT INTO tenants (id, name, rif, direccion, type, plan, city, manager, estado, zona_postal, kpis, inventario, gastos, ventas, ventas_mes, productos)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16)
-           ON CONFLICT (id) DO NOTHING`,
-          [
-            t.id, t.name, t.rif, t.direccion, t.type, t.plan,
-            t.city, t.manager, t.estado, t.zona_postal,
-            JSON.stringify(t.kpis),
-            JSON.stringify(t.inventario),
-            JSON.stringify(t.gastos),
-            JSON.stringify(t.ventas),
-            JSON.stringify(t.ventas_mes),
-            JSON.stringify(t.productos),
-          ]
-        );
-      }
+    if (!tenantCount || tenantCount === 0) {
+      await supabase.from("tenants").upsert(SEED_TENANTS, { onConflict: "id", ignoreDuplicates: true });
     }
 
-    const { rows: existingUsers } = await pool.query("SELECT id FROM usuarios LIMIT 1");
-    if (existingUsers.length === 0) {
-      for (const u of SEED_USUARIOS) {
-        await pool.query(
-          `INSERT INTO usuarios (nombre, whatsapp, usuario, clave, comercio, rol, estado, email, vistas)
-           VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-           ON CONFLICT (usuario) DO NOTHING`,
-          [u.nombre, u.whatsapp, u.usuario, u.clave, u.comercio, u.rol, u.estado, u.email, JSON.stringify(u.vistas)]
-        );
-      }
+    // Seed usuarios only if fewer than 3 exist (allow user-created ones)
+    const { count: userCount } = await supabase
+      .from("usuarios")
+      .select("*", { count: "exact", head: true });
+
+    if (!userCount || userCount === 0) {
+      await supabase.from("usuarios").upsert(SEED_USUARIOS, { onConflict: "usuario", ignoreDuplicates: true });
     }
 
     res.json({ ok: true, message: "Migración completada" });
@@ -190,167 +121,156 @@ router.post("/migrate", async (_req: Request, res: Response) => {
 /* ── Tenants CRUD ───────────────────────────────────────── */
 
 router.get("/tenants", async (_req: Request, res: Response) => {
-  try {
-    const { rows } = await pool.query("SELECT * FROM tenants ORDER BY name");
-    res.json(rows);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  const { data, error } = await supabase.from("tenants").select("*").order("name");
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data);
 });
 
 router.get("/tenants/:id", async (req: Request, res: Response) => {
-  try {
-    const { rows } = await pool.query("SELECT * FROM tenants WHERE id=$1", [req.params.id]);
-    if (!rows[0]) { res.status(404).json({ error: "Tenant no encontrado" }); return; }
-    res.json(rows[0]);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  const { data, error } = await supabase.from("tenants").select("*").eq("id", req.params.id).single();
+  if (error || !data) { res.status(404).json({ error: "Tenant no encontrado" }); return; }
+  res.json(data);
 });
 
 router.post("/tenants", async (req: Request, res: Response) => {
-  try {
-    const { id, name, rif, direccion, type, plan, city, manager, zona_postal } = req.body;
-    if (!id || !name) { res.status(400).json({ error: "id y name requeridos" }); return; }
-    const { rows } = await pool.query(
-      `INSERT INTO tenants (id, name, rif, direccion, type, plan, city, manager, zona_postal)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)
-       ON CONFLICT (id) DO UPDATE SET
-         name=$2, rif=$3, direccion=$4, type=$5, plan=$6, city=$7, manager=$8, zona_postal=$9, updated_at=NOW()
-       RETURNING *`,
-      [id, name, rif||'', direccion||'', type||'Otro', plan||'basico', city||'', manager||'', zona_postal||'0000']
-    );
-    res.status(201).json(rows[0]);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  const { id, name, rif, direccion, type, plan, city, manager, zona_postal } = req.body;
+  if (!id || !name) { res.status(400).json({ error: "id y name requeridos" }); return; }
+
+  const payload = {
+    id, name,
+    rif: rif || '',
+    direccion: direccion || '',
+    type: type || 'Otro',
+    plan: plan || 'basico',
+    city: city || '',
+    manager: manager || '',
+    zona_postal: zona_postal || '0000',
+    estado: 'Activo',
+    kpis: { ventasUSD: 0, ticketProm: 0, productos: 0, clientes: 0 },
+    inventario: [],
+    gastos: [],
+    ventas: [],
+    ventas_mes: [0,0,0,0,0,0,0,0,0,0,0,0],
+    productos: [],
+  };
+
+  const { data, error } = await supabase
+    .from("tenants")
+    .upsert(payload, { onConflict: "id" })
+    .select()
+    .single();
+
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.status(201).json(data);
 });
 
 router.patch("/tenants/:id", async (req: Request, res: Response) => {
-  try {
-    const allowed = ['name','rif','direccion','type','plan','city','manager','estado','zona_postal','kpis','inventario','gastos','ventas','ventas_mes','productos'];
-    const sets: string[] = [];
-    const vals: any[] = [];
-    let idx = 1;
-    for (const key of allowed) {
-      if (req.body[key] !== undefined) {
-        sets.push(`${key}=$${idx++}`);
-        vals.push(typeof req.body[key] === 'object' ? JSON.stringify(req.body[key]) : req.body[key]);
-      }
-    }
-    if (sets.length === 0) { res.status(400).json({ error: "Nada que actualizar" }); return; }
-    sets.push(`updated_at=NOW()`);
-    vals.push(req.params.id);
-    const { rows } = await pool.query(
-      `UPDATE tenants SET ${sets.join(',')} WHERE id=$${idx} RETURNING *`,
-      vals
-    );
-    if (!rows[0]) { res.status(404).json({ error: "Tenant no encontrado" }); return; }
-    res.json(rows[0]);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  const allowed = ['name','rif','direccion','type','plan','city','manager','estado','zona_postal','kpis','inventario','gastos','ventas','ventas_mes','productos'];
+  const update: Record<string, any> = {};
+  for (const key of allowed) {
+    if (req.body[key] !== undefined) update[key] = req.body[key];
   }
+  if (Object.keys(update).length === 0) { res.status(400).json({ error: "Nada que actualizar" }); return; }
+  update.updated_at = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("tenants")
+    .update(update)
+    .eq("id", req.params.id)
+    .select()
+    .single();
+
+  if (error || !data) { res.status(404).json({ error: "Tenant no encontrado" }); return; }
+  res.json(data);
 });
 
 router.delete("/tenants/:id", async (req: Request, res: Response) => {
-  try {
-    await pool.query("DELETE FROM tenants WHERE id=$1", [req.params.id]);
-    res.json({ ok: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  const { error } = await supabase.from("tenants").delete().eq("id", req.params.id);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ ok: true });
 });
 
 /* ── Usuarios CRUD ──────────────────────────────────────── */
 
 router.get("/usuarios", async (_req: Request, res: Response) => {
-  try {
-    const { rows } = await pool.query("SELECT * FROM usuarios ORDER BY nombre");
-    res.json(rows);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  const { data, error } = await supabase.from("usuarios").select("*").order("nombre");
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data);
 });
 
 router.post("/usuarios", async (req: Request, res: Response) => {
-  try {
-    const { nombre, whatsapp, usuario, clave, comercio, rol, vistas } = req.body;
-    if (!nombre || !usuario) { res.status(400).json({ error: "nombre y usuario requeridos" }); return; }
-    const { rows } = await pool.query(
-      `INSERT INTO usuarios (nombre, whatsapp, usuario, clave, comercio, rol, vistas)
-       VALUES ($1,$2,$3,$4,$5,$6,$7) RETURNING *`,
-      [nombre, whatsapp||'', usuario, clave||'', comercio||'', rol||'Operador', JSON.stringify(vistas||['dashboard','pos','inventario'])]
-    );
-    res.status(201).json(rows[0]);
-  } catch (err: any) {
-    if (err.code === '23505') { res.status(409).json({ error: "Ese usuario ya existe" }); return; }
-    res.status(500).json({ error: err.message });
+  const { nombre, whatsapp, usuario, clave, comercio, rol, vistas } = req.body;
+  if (!nombre || !usuario) { res.status(400).json({ error: "nombre y usuario requeridos" }); return; }
+
+  const payload = {
+    nombre,
+    whatsapp: whatsapp || '',
+    usuario,
+    clave: clave || '',
+    comercio: comercio || '',
+    rol: rol || 'Operador',
+    estado: 'Activo',
+    email: req.body.email || '',
+    vistas: vistas || ['dashboard','pos','inventario'],
+  };
+
+  const { data, error } = await supabase.from("usuarios").insert(payload).select().single();
+  if (error) {
+    if (error.code === '23505') { res.status(409).json({ error: "Ese usuario ya existe" }); return; }
+    res.status(500).json({ error: error.message });
+    return;
   }
+  res.status(201).json(data);
 });
 
 router.patch("/usuarios/:id", async (req: Request, res: Response) => {
-  try {
-    const allowed = ['nombre','whatsapp','usuario','clave','comercio','rol','estado','email','vistas'];
-    const sets: string[] = [];
-    const vals: any[] = [];
-    let idx = 1;
-    for (const key of allowed) {
-      if (req.body[key] !== undefined) {
-        sets.push(`${key}=$${idx++}`);
-        vals.push(typeof req.body[key] === 'object' ? JSON.stringify(req.body[key]) : req.body[key]);
-      }
-    }
-    if (sets.length === 0) { res.status(400).json({ error: "Nada que actualizar" }); return; }
-    sets.push(`updated_at=NOW()`);
-    vals.push(req.params.id);
-    const { rows } = await pool.query(
-      `UPDATE usuarios SET ${sets.join(',')} WHERE id=$${idx} RETURNING *`,
-      vals
-    );
-    if (!rows[0]) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
-    res.json(rows[0]);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
+  const allowed = ['nombre','whatsapp','usuario','clave','comercio','rol','estado','email','vistas'];
+  const update: Record<string, any> = {};
+  for (const key of allowed) {
+    if (req.body[key] !== undefined) update[key] = req.body[key];
   }
+  if (Object.keys(update).length === 0) { res.status(400).json({ error: "Nada que actualizar" }); return; }
+  update.updated_at = new Date().toISOString();
+
+  const { data, error } = await supabase
+    .from("usuarios")
+    .update(update)
+    .eq("id", req.params.id)
+    .select()
+    .single();
+
+  if (error || !data) { res.status(404).json({ error: "Usuario no encontrado" }); return; }
+  res.json(data);
 });
 
 router.delete("/usuarios/:id", async (req: Request, res: Response) => {
-  try {
-    await pool.query("DELETE FROM usuarios WHERE id=$1", [req.params.id]);
-    res.json({ ok: true });
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  const { error } = await supabase.from("usuarios").delete().eq("id", req.params.id);
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json({ ok: true });
 });
 
 /* ── Global Config ──────────────────────────────────────── */
 
 router.get("/global-config", async (_req: Request, res: Response) => {
-  try {
-    const { rows } = await pool.query("SELECT key, value FROM global_config");
-    const config: Record<string, any> = {};
-    for (const row of rows) config[row.key] = Number(row.value);
-    res.json(config);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  const { data, error } = await supabase.from("global_config").select("key, value");
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  const config: Record<string, any> = {};
+  for (const row of (data ?? [])) config[row.key] = Number(row.value);
+  res.json(config);
 });
 
 router.patch("/global-config/:key", async (req: Request, res: Response) => {
-  try {
-    const { value } = req.body;
-    if (value === undefined) { res.status(400).json({ error: "value requerido" }); return; }
-    const { rows } = await pool.query(
-      `INSERT INTO global_config (key, value, updated_at)
-       VALUES ($1, $2, NOW())
-       ON CONFLICT (key) DO UPDATE SET value=$2, updated_at=NOW()
-       RETURNING *`,
-      [req.params.key, value]
-    );
-    res.json(rows[0]);
-  } catch (err: any) {
-    res.status(500).json({ error: err.message });
-  }
+  const { value } = req.body;
+  if (value === undefined) { res.status(400).json({ error: "value requerido" }); return; }
+
+  const { data, error } = await supabase
+    .from("global_config")
+    .upsert({ key: req.params.key, value, updated_at: new Date().toISOString() }, { onConflict: "key" })
+    .select()
+    .single();
+
+  if (error) { res.status(500).json({ error: error.message }); return; }
+  res.json(data);
 });
 
 export default router;
