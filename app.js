@@ -333,3 +333,18 @@ async function registrarComercio(datos) {
     toast("❌ Error al registrar: " + err.message);
   }
 }
+
+async function registrarComercio(datos) {
+  try {
+    const { data, error } = await _supabase
+      .from("tenants")
+      .insert([datos])
+      .select();
+    if (error) throw error;
+    toast("✅ Comercio registrado: " + (datos.nombre || "Nuevo Comercio"));
+    if (typeof render === "function") render();
+  } catch (err) {
+    console.error("Error:", err.message);
+    toast("❌ Error al registrar: " + err.message);
+  }
+}
