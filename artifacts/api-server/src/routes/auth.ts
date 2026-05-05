@@ -14,8 +14,7 @@ router.post("/auth/login", async (req: Request, res: Response) => {
   const { data, error } = await supabase
     .from("usuarios")
     .select("*")
-    .eq("usuario", usuario.trim())
-    .eq("estado", "Activo")
+    .eq("username", usuario.trim())
     .single();
 
   if (error || !data) {
@@ -23,12 +22,25 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     return;
   }
 
-  if (data.clave !== clave) {
+  if (data.password_hash !== clave) {
     res.status(401).json({ error: "Credenciales incorrectas" });
     return;
   }
 
-  res.json(data);
+  // Map Supabase schema → app session format
+  res.json({
+    id:       data.id,
+    _dbId:    data.id,
+    nombre:   data.nombre_completo || data.username,
+    usuario:  data.username,
+    clave:    data.password_hash,
+    comercio: data.comercio_id || "all",
+    rol:      data.rol || "Operador",
+    estado:   data.estado || "Activo",
+    email:    data.email || "",
+    vistas:   data.vistas || ["dashboard", "pos", "inventario", "clientes", "gastos", "reportes"],
+    whatsapp: data.whatsapp || "",
+  });
 });
 
 export default router;
