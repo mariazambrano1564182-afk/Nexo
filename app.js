@@ -256,26 +256,6 @@ async function updateBCVRate(newRate) {
     alert("Error al actualizar: " + err.message);
   }
 }
-      .from("global_config")
-      .update({ value: newRate })
-      .eq("key", "tasa_bcv");
-    if (error) throw error;
-    STATE.bcv = newRate;
-    console.log("Tasa actualizada en Supabase");
-  } catch (err) {
-    console.error("Error actualizando tasa:", err.message);
-    throw err;
-  }
-}
-      body: JSON.stringify({ value: newRate }),
-    });
-    if (!res.ok) throw new Error((await res.json()).error);
-    STATE.bcv = newRate;
-  } catch (err) {
-    console.error('[GSP] updateBCVRate error:', err.message);
-    throw err;
-  }
-}
 
 /* ── Tenant switcher DOM sync ───────────────────────────── */
 
