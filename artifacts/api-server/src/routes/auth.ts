@@ -3,6 +3,13 @@ import { supabase } from "../lib/supabase";
 
 const router = Router();
 
+const ROL_TO_DISPLAY: Record<string, string> = {
+  "admin":        "Super Admin",
+  "gerente":      "Gerente",
+  "vendedor":     "Vendedor",
+  "farmaceutico": "Farmacéutico",
+};
+
 router.post("/auth/login", async (req: Request, res: Response) => {
   const { usuario, clave } = req.body;
 
@@ -27,6 +34,9 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     return;
   }
 
+  const dbRol      = data.rol || "gerente";
+  const rolDisplay = ROL_TO_DISPLAY[dbRol] || dbRol;
+
   // Map Supabase schema → app session format
   res.json({
     id:       data.id,
@@ -35,7 +45,7 @@ router.post("/auth/login", async (req: Request, res: Response) => {
     usuario:  data.username,
     clave:    data.password_hash,
     comercio: data.comercio_id || "all",
-    rol:      data.rol || "Operador",
+    rol:      rolDisplay,
     estado:   data.estado || "Activo",
     email:    data.email || "",
     vistas:   data.vistas || ["dashboard", "pos", "inventario", "clientes", "gastos", "reportes"],
