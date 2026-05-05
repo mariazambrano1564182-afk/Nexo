@@ -319,3 +319,17 @@ initGlobalStateProvider().then(() => {
     console.log('[GSP] UI refreshed from DB state');
   }
 });
+async function registrarComercio(datos) {
+  try {
+    const { data, error } = await _supabase
+      .from("tenants")
+      .insert([datos])
+      .select();
+    if (error) throw error;
+    toast("✅ Comercio registrado: " + datos.nombre);
+    if (typeof render === "function") render();
+  } catch (err) {
+    console.error("Error:", err.message);
+    toast("❌ Error al registrar: " + err.message);
+  }
+}
