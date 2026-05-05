@@ -243,17 +243,28 @@ async function deleteUsuarioFromDB(dbId) {
 
 async function updateBCVRate(newRate) {
   try {
-    const { error } = await _supabase
-      .from("global_config")
-      .update({ value: newRate })
-      .eq("key", "tasa_bcv");
-    if (error) throw error;
+    const res = await fetch(`/api/global-config/tasa_bcv`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ value: newRate }),
+    });
+    if (!res.ok) throw new Error((await res.json()).error || 'Error al actualizar');
+
+    if (_supabase) {
+      const { error } = await _supabase
+        .from("global_config")
+        .update({ value: newRate })
+        .eq("key", "tasa_bcv");
+      if (error) console.warn('[GSP] Supabase BCV sync error:', error.message);
+    }
+
     STATE.bcv = newRate;
     if (typeof render === "function") render();
-    toast("✅ Tasa BCV sincronizada correctamente");
+    toast("✅ Tasa BCV actualizada correctamente");
   } catch (err) {
     console.error("Error:", err.message);
     toast("❌ Error: " + err.message);
+    throw err;
   }
 }
 

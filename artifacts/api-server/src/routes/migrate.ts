@@ -45,23 +45,16 @@ async function sbFetch(
   }
 }
 
-/* Upsert a usuario row to Supabase (by 'usuario' unique field).
-   Note: 'clave' (password) is intentionally excluded from Supabase sync. */
-async function sbUpsertUsuario(u: Record<string, any>) {
-  return sbFetch('POST', 'usuarios?on_conflict=usuario', {
-    nombre:   u.nombre   || '',
-    whatsapp: u.whatsapp || '',
-    usuario:  u.usuario,
-    comercio: u.comercio || '',
-    rol:      u.rol      || 'Operador',
-    estado:   u.estado   || 'Activo',
-    email:    u.email    || '',
-    vistas:   u.vistas,
-  });
+/* Supabase usuarios sync is intentionally disabled.
+   The Supabase 'usuarios' table is an auth table with a different schema (password_hash, etc.)
+   This app manages its own auth via local PostgreSQL.
+   Supabase is only used here for Realtime on global_config. */
+async function sbUpsertUsuario(_u: Record<string, any>) {
+  return { ok: true, status: 200, data: null };
 }
 
-async function sbDeleteUsuario(usuarioField: string) {
-  return sbFetch('DELETE', `usuarios?usuario=eq.${encodeURIComponent(usuarioField)}`);
+async function sbDeleteUsuario(_usuarioField: string) {
+  return { ok: true, status: 200, data: null };
 }
 
 /* ── Seed data ──────────────────────────────────────────── */
