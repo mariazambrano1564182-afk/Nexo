@@ -243,15 +243,27 @@ async function deleteUsuarioFromDB(dbId) {
 
 async function updateBCVRate(newRate) {
   try {
-    const res = await fetch('/api/global-config/tasa_bcv', {
+    const res = await fetch(`/api/global-config/tasa_bcv`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ value: newRate }),
     });
-    if (!res.ok) throw new Error((await res.json()).error);
+    if (!res.ok) throw new Error((await res.json()).error || 'Error al actualizar');
+
+    if (_supabase) {
+      const { error } = await _supabase
+        .from("global_config")
+        .update({ value: newRate })
+        .eq("key", "tasa_bcv");
+      if (error) console.warn('[GSP] Supabase BCV sync error:', error.message);
+    }
+
     STATE.bcv = newRate;
+    if (typeof render === "function") render();
+    toast("✅ Tasa BCV actualizada correctamente");
   } catch (err) {
-    console.error('[GSP] updateBCVRate error:', err.message);
+    console.error("Error:", err.message);
+    toast("❌ Error: " + err.message);
     throw err;
   }
 }
@@ -318,3 +330,32 @@ initGlobalStateProvider().then(() => {
     console.log('[GSP] UI refreshed from DB state');
   }
 });
+async function registrarComercio(datos) {
+  try {
+    const { data, error } = await _supabase
+      .from("tenants")
+      .insert([datos])
+      .select();
+    if (error) throw error;
+    toast("✅ Comercio registrado: " + datos.nombre);
+    if (typeof render === "function") render();
+  } catch (err) {
+    console.error("Error:", err.message);
+    toast("❌ Error al registrar: " + err.message);
+  }
+}
+
+async function registrarComercio(datos) {
+  try {
+    const { data, error } = await _supabase
+      .from("tenants")
+      .insert([datos])
+      .select();
+    if (error) throw error;
+    toast("✅ Comercio registrado: " + (datos.nombre || "Nuevo Comercio"));
+    if (typeof render === "function") render();
+  } catch (err) {
+    console.error("Error:", err.message);
+    toast("❌ Error al registrar: " + err.message);
+  }
+}
