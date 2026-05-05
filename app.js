@@ -250,10 +250,10 @@ async function updateBCVRate(newRate) {
     if (error) throw error;
     STATE.bcv = newRate;
     if (typeof render === "function") render();
-    alert("Tasa actualizada con éxito");
+    toast("✅ Tasa BCV sincronizada correctamente");
   } catch (err) {
     console.error("Error:", err.message);
-    alert("Error al actualizar: " + err.message);
+    toast("❌ Error: " + err.message);
   }
 }
 
