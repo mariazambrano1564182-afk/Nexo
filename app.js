@@ -243,9 +243,18 @@ async function deleteUsuarioFromDB(dbId) {
 
 async function updateBCVRate(newRate) {
   try {
-    const res = await fetch('/api/global-config/tasa_bcv', {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
+    const { error } = await supabase
+      .from("global_config")
+      .update({ value: newRate })
+      .eq("key", "tasa_bcv");
+    if (error) throw error;
+    STATE.bcv = newRate;
+    console.log("Tasa actualizada en Supabase");
+  } catch (err) {
+    console.error("Error actualizando tasa:", err.message);
+    throw err;
+  }
+}
       body: JSON.stringify({ value: newRate }),
     });
     if (!res.ok) throw new Error((await res.json()).error);
