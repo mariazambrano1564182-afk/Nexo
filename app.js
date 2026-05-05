@@ -243,7 +243,19 @@ async function deleteUsuarioFromDB(dbId) {
 
 async function updateBCVRate(newRate) {
   try {
-    const { error } = await supabase
+    const { error } = await _supabase
+      .from("global_config")
+      .update({ value: newRate })
+      .eq("key", "tasa_bcv");
+    if (error) throw error;
+    STATE.bcv = newRate;
+    if (typeof render === "function") render();
+    alert("Tasa actualizada con éxito");
+  } catch (err) {
+    console.error("Error:", err.message);
+    alert("Error al actualizar: " + err.message);
+  }
+}
       .from("global_config")
       .update({ value: newRate })
       .eq("key", "tasa_bcv");
